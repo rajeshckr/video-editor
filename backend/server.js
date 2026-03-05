@@ -8,7 +8,9 @@ const config = require('./config');
 const uploadRouter = require('./routes/upload');
 const projectRouter = require('./routes/project');
 const renderRouter = require('./routes/render');
+const captionRouter = require('./routes/caption');
 const cleanupService = require('./services/cleanupService');
+const setupWhisper = require('./setupWhisper');
 
 const app = express();
 
@@ -40,6 +42,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/upload', uploadRouter);
 app.use('/api/project', projectRouter);
 app.use('/api/render', renderRouter);
+app.use('/api/caption', captionRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -61,9 +64,13 @@ app.use((err, req, res, next) => {
 });
 
 // ─── Start server ─────────────────────────────────────────────────────────────
-app.listen(config.port, () => {
+app.listen(config.port, async () => {
   console.log(`[Server] Running on http://localhost:${config.port}`);
   console.log(`[Server] FFmpeg: ${config.ffmpegPath}`);
   console.log(`[Server] TMP:    ${config.tmpPath}`);
+  
+  // Ensure AI models and binaries are ready
+  await setupWhisper();
+  
   cleanupService.start();
 });

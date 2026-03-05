@@ -10,8 +10,10 @@ export default function Timeline() {
   const {
     project, cursorTime, setCursorTime, zoom, setZoom,
     setInPoint, setOutPoint, selectedClipId, setSelectedClip,
-    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo
+    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack
   } = useEditorStore();
+
+  const [isCaptioning, setIsCaptioning] = useState<Record<string, boolean>>({});
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<{ type: 'playhead' | 'inpoint' | 'outpoint' | 'clip' | 'clipresize'; clipId?: string; trackId?: string; edge?: 'left' | 'right'; startX: number; startTime: number; startDuration?: number; startSrc?: number } | null>(null);
@@ -141,6 +143,82 @@ export default function Timeline() {
     if (type === 'audio') return { bg: '#0c4a6e', border: '#0891b2', text: '#7dd3fc' };
     if (type === 'image') return { bg: '#7c2d12', border: '#ea580c', text: '#fdba74' };
     return { bg: '#78350f', border: '#d97706', text: '#fde68a' }; // text
+  };
+
+  // ── Auto-Captioning ────────────────────────────────────────────────────────
+  const handleAutoCaption = async (clip: Clip) => {
+    setIsCaptioning(prev => ({ ...prev, [clip.id]: true }));
+    addSnackbar('info', `Running Whisper AI to generate captions... (This might take a minute)`);
+    setContextMenu(null);
+
+    try {
+      const resp = await fetch(`http://localhost:3001/api/caption`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: clip.filePath })
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(()=>({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+
+      const { captions } = await resp.json();
+      if (!captions || captions.length === 0) {
+        throw new Error("No speech detected or parsing failed.");
+      }
+
+      // Ensure we have an overlay track for the captions
+      let overlayTrack = project.tracks.find(t => t.type === 'overlay' && t.name === 'Captions');
+      if (!overlayTrack) {
+        addTrack('overlay');
+        overlayTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'overlay' && t.name === 'Overlay 1'); // Get the newly created one
+        if (overlayTrack) {
+          overlayTrack.name = 'Captions';
+        } else {
+           overlayTrack = project.tracks.find(t => t.type === 'overlay'); 
+        }
+      }
+
+      if (!overlayTrack) throw new Error("Could not find or create an overlay track");
+
+      // Insert all generated captions as editable text clips
+      captions.forEach((cap: any, index: number) => {
+        if (!cap.text || cap.text.trim() === '') return;
+        const duration = cap.end - cap.start;
+        if (duration <= 0) return;
+
+        const newClip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
+           type: 'text',
+           filePath: '',
+           originalName: `Caption ${index+1}`,
+           srcStart: 0,
+           srcEnd: duration,
+           timelinePosition: clip.timelinePosition + cap.start, // Offset by parent clip start
+           timelineDuration: duration,
+           volume: 1,
+           opacity: 1,
+           transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+           effects: [],
+           text: cap.text.trim(),
+           font: 'Inter',
+           fontSize: 64,
+           color: '#ffffff',
+           y: project.resolution.height * 0.85, // Position near bottom
+           animation: 'none'
+        };
+        
+        addClipToTrack(overlayTrack.id, newClip);
+      });
+
+      addSnackbar('success', `Generated ${captions.length} captions successfully!`);
+
+    } catch (err: any) {
+      console.error(err);
+      addSnackbar('error', `Captions failed: ${err.message}`);
+    } finally {
+      setIsCaptioning(prev => ({ ...prev, [clip.id]: false }));
+    }
   };
 
   return (
@@ -355,6 +433,15 @@ export default function Timeline() {
                 }}
               >
                 Extract Audio
+              </button>
+            )}
+            {contextMenu.clip.type === 'audio' && (
+              <button
+                className="w-full text-left px-3 py-1.5 text-xs text-[#e6edf3] hover:bg-green-600 hover:text-white transition-colors border-t border-[#30363d] mt-1 pt-1 flex items-center justify-between pointer-events-auto"
+                onClick={() => handleAutoCaption(contextMenu.clip)}
+                disabled={isCaptioning[contextMenu.clip.id]}
+              >
+                {isCaptioning[contextMenu.clip.id] ? 'Generating...' : 'Auto-Caption (Whisper)'}
               </button>
             )}
           </div>
