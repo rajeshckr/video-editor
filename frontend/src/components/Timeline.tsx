@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import type { Clip } from '../types';
 
@@ -10,11 +10,12 @@ export default function Timeline() {
   const {
     project, cursorTime, setCursorTime, zoom, setZoom,
     setInPoint, setOutPoint, selectedClipId, setSelectedClip,
-    updateClip, removeClip, addClipToTrack,
+    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo
   } = useEditorStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<{ type: 'playhead' | 'inpoint' | 'outpoint' | 'clip' | 'clipresize'; clipId?: string; trackId?: string; edge?: 'left' | 'right'; startX: number; startTime: number; startDuration?: number; startSrc?: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clip: Clip, trackId: string } | null>(null);
 
   const timeToX = (t: number) => t * zoom;
   const xToTime = (x: number) => Math.max(0, x / zoom);
@@ -82,12 +83,16 @@ export default function Timeline() {
   };
 
   // ── Timeline drop ─────────────────────────────────────────────────────────
-  const onTrackDrop = (e: React.DragEvent, trackId: string) => {
+  const onTrackDrop = (e: React.DragEvent, trackId: string, trackType: string) => {
     e.preventDefault();
     const raw = e.dataTransfer.getData('application/json');
     if (!raw) return;
     const { asset } = JSON.parse(raw);
     if (!asset) return;
+
+    if (asset.type === 'video' && trackType !== 'video') { addSnackbar('error', 'Video clips must go on Video tracks.'); return; }
+    if (asset.type === 'audio' && trackType !== 'audio') { addSnackbar('error', 'Audio clips must go on Audio tracks.'); return; }
+    if ((asset.type === 'image' || asset.type === 'text') && trackType !== 'overlay') { addSnackbar('error', 'Images and Text must go on Overlay tracks.'); return; }
     const rect = scrollRef.current!.getBoundingClientRect();
     const x = e.clientX - rect.left - TRACK_LABEL_W + scrollRef.current!.scrollLeft;
     const pos = Math.max(0, x / zoom);
@@ -164,11 +169,13 @@ export default function Timeline() {
               <div key={track.id} style={{ height: TRACK_H, borderBottom: '1px solid #30363d' }}
                 className={`flex items-center px-2 gap-1 track-${track.type}`}>
                 <span className="text-xs text-[#e6edf3] flex-1 truncate">{track.name}</span>
-                <button className="btn btn-ghost p-0.5" title="Toggle visibility"
-                  onClick={() => useEditorStore.getState().toggleTrackVisible(track.id)}>
-                  {track.visible ? '👁' : '🚫'}
-                </button>
-                {track.type === 'audio' && (
+                {track.type !== 'audio' && (
+                  <button className="btn btn-ghost p-0.5" title="Toggle visibility"
+                    onClick={() => useEditorStore.getState().toggleTrackVisible(track.id)}>
+                    {track.visible ? '👁' : '🚫'}
+                  </button>
+                )}
+                {(track.type === 'audio' || track.type === 'video') && (
                   <button className="btn btn-ghost p-0.5" title="Mute"
                     onClick={() => useEditorStore.getState().toggleTrackMute(track.id)}>
                     {track.muted ? '🔇' : '🔊'}
@@ -223,7 +230,7 @@ export default function Timeline() {
               <div
                 key={track.id}
                 style={{ height: TRACK_H, width: totalWidth, position: 'relative', borderBottom: '1px solid #1c2128', background: '#0d1117' }}
-                onDrop={e => onTrackDrop(e, track.id)}
+                onDrop={e => onTrackDrop(e, track.id, track.type)}
                 onDragOver={e => e.preventDefault()}
               >
                 {/* Playhead line */}
@@ -257,8 +264,8 @@ export default function Timeline() {
                       }}
                       onContextMenu={e => {
                         e.preventDefault();
-                        const action = window.confirm(`Delete clip "${clip.originalName}"?`);
-                        if (action) removeClip(track.id, clip.id);
+                        e.stopPropagation();
+                        setContextMenu({ x: e.clientX, y: e.clientY, clip, trackId: track.id });
                       }}
                     >
                       {/* Left resize handle */}
@@ -294,6 +301,39 @@ export default function Timeline() {
           </div>
         </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} onContextMenu={(e) => {e.preventDefault(); setContextMenu(null)}} />
+          <div
+            className="fixed z-50 bg-[#1c2128] border border-[#30363d] rounded-lg shadow-xl py-1 w-40 overflow-hidden"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            <button
+              className="w-full text-left px-3 py-1.5 text-xs text-[#e6edf3] hover:bg-red-600 hover:text-white transition-colors"
+              onClick={() => {
+                removeClip(contextMenu.trackId, contextMenu.clip.id);
+                setContextMenu(null);
+              }}
+            >
+              Delete Clip
+            </button>
+            {contextMenu.clip.type === 'video' && (
+              <button
+                className="w-full text-left px-3 py-1.5 text-xs text-[#e6edf3] hover:bg-blue-600 hover:text-white transition-colors border-t border-[#30363d] mt-1 pt-1"
+                onClick={() => {
+                  extractAudioFromVideo(contextMenu.trackId, contextMenu.clip.id);
+                  setContextMenu(null);
+                  addSnackbar('success', 'Audio extracted to new track');
+                }}
+              >
+                Extract Audio
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

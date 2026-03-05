@@ -10,6 +10,7 @@ export default function PreviewPlayer() {
   } = useEditorStore();
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const startWallRef = useRef<number>(0);
@@ -20,10 +21,10 @@ export default function PreviewPlayer() {
   const aspect = W / H;
 
   // Find active video clip at a given time
-  const getActiveVideoClip = (t: number): Clip | null => {
+  const getActiveVideoClip = (t: number, proj = project): Clip | null => {
     let best: Clip | null = null;
     let bestTrack = -1;
-    for (const track of project.tracks) {
+    for (const track of proj.tracks) {
       if (!track.visible || track.type === 'audio') continue;
       for (const clip of track.clips) {
         if (clip.type !== 'video') continue;
@@ -36,14 +37,17 @@ export default function PreviewPlayer() {
   };
 
   // Draw canvas overlays (images, text) for given cursor time
-  const drawOverlays = useCallback((t: number) => {
+  const drawOverlays = useCallback((t: number, proj = project) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    for (const track of [...project.tracks].sort((a, b) => a.trackNumber - b.trackNumber)) {
+    const W = proj.resolution.width;
+    const H = proj.resolution.height;
+
+    for (const track of [...proj.tracks].sort((a, b) => a.trackNumber - b.trackNumber)) {
       if (!track.visible) continue;
       for (const clip of track.clips) {
         if (t < clip.timelinePosition || t >= clip.timelinePosition + clip.timelineDuration) continue;
@@ -76,17 +80,40 @@ export default function PreviewPlayer() {
 
   // Sync video element to cursor time
   useEffect(() => {
+    if (playbackState === 'playing') return;
     const vid = videoRef.current;
-    if (!vid || playbackState === 'playing') return;
-    const clip = getActiveVideoClip(cursorTime);
-    if (clip) {
-      const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
-      if (vid.src !== src) { vid.src = src; vid.load(); }
-      const clipOffset = cursorTime - clip.timelinePosition + clip.srcStart;
-      if (Math.abs(vid.currentTime - clipOffset) > 0.1) vid.currentTime = clipOffset;
-    } else {
-      vid.src = '';
+    if (vid) {
+      const clip = getActiveVideoClip(cursorTime);
+      if (clip) {
+        const track = project.tracks.find(t => t.id === clip.trackId);
+        vid.muted = track?.muted || false;
+        vid.volume = clip.volume ?? 1;
+        const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+        if (!vid.src.includes(clip.filePath.split(/[\\/]/).pop()!)) { vid.src = src; vid.load(); }
+        const clipOffset = cursorTime - clip.timelinePosition + clip.srcStart;
+        if (Math.abs(vid.currentTime - clipOffset) > 0.1) vid.currentTime = clipOffset;
+      } else {
+        vid.src = '';
+      }
     }
+
+    // Sync audio tracks
+    for (const track of project.tracks) {
+      if (track.type !== 'audio') continue;
+      const aRef = audioRefs.current[track.id];
+      if (!aRef) continue;
+      const aClip = track.clips.find(c => cursorTime >= c.timelinePosition && cursorTime < c.timelinePosition + c.timelineDuration);
+      if (aClip && !track.muted && track.visible) {
+        const src = `${API}/api/upload/file/${aClip.filePath.split(/[\\/]/).pop()}`;
+        if (!aRef.src.includes(aClip.filePath.split(/[\\/]/).pop()!)) { aRef.src = src; aRef.load(); }
+        aRef.volume = aClip.volume ?? 1;
+        const clipOffset = cursorTime - aClip.timelinePosition + aClip.srcStart;
+        if (Math.abs(aRef.currentTime - clipOffset) > 0.1) aRef.currentTime = clipOffset;
+      } else {
+        if (aRef.src) { aRef.pause(); aRef.removeAttribute('src'); aRef.load(); }
+      }
+    }
+
     drawOverlays(cursorTime);
   }, [cursorTime, playbackState, project]);
 
@@ -97,24 +124,28 @@ export default function PreviewPlayer() {
       startCursorRef.current = cursorTime;
 
       const tick = () => {
+        const proj = useEditorStore.getState().project;
         const elapsed = (performance.now() - startWallRef.current) / 1000;
         const newTime = startCursorRef.current + elapsed;
-        const outPoint = project.outPoint;
+        const outPoint = proj.outPoint;
 
         if (newTime >= outPoint) {
-          setCursorTime(project.inPoint);
+          setCursorTime(proj.inPoint);
           setPlaybackState('paused');
           return;
         }
 
         setCursorTime(newTime);
-        drawOverlays(newTime);
+        drawOverlays(newTime, proj);
 
         // Sync video
         const vid = videoRef.current;
         if (vid) {
-          const clip = getActiveVideoClip(newTime);
+          const clip = getActiveVideoClip(newTime, proj);
           if (clip) {
+            const track = proj.tracks.find(t => t.id === clip.trackId);
+            vid.muted = track?.muted || false;
+            vid.volume = clip.volume ?? 1;
             const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
             if (!vid.src.includes(clip.filePath.split(/[\\/]/).pop()!)) {
               vid.src = src; vid.load();
@@ -127,12 +158,39 @@ export default function PreviewPlayer() {
           }
         }
 
+        // Sync audio
+        for (const track of proj.tracks) {
+          if (track.type !== 'audio') continue;
+          const aRef = audioRefs.current[track.id];
+          if (!aRef) continue;
+          
+          if (track.muted || !track.visible) {
+            if (!aRef.paused) aRef.pause();
+            continue;
+          }
+
+          const clip = track.clips.find(c => newTime >= c.timelinePosition && newTime < c.timelinePosition + c.timelineDuration);
+          if (clip) {
+            const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+            if (!aRef.src.includes(clip.filePath.split(/[\\/]/).pop()!)) {
+              aRef.src = src; aRef.load();
+            }
+            aRef.volume = clip.volume ?? 1;
+            if (aRef.paused) aRef.play().catch(() => {});
+            const clipOffset = newTime - clip.timelinePosition + clip.srcStart;
+            if (Math.abs(aRef.currentTime - clipOffset) > 0.25) aRef.currentTime = clipOffset;
+          } else {
+            if (!aRef.paused) aRef.pause();
+          }
+        }
+
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
     } else {
       cancelAnimationFrame(rafRef.current);
       videoRef.current?.pause();
+      Object.values(audioRefs.current).forEach(a => a?.pause());
     }
     return () => cancelAnimationFrame(rafRef.current);
   }, [playbackState]);
@@ -170,6 +228,12 @@ export default function PreviewPlayer() {
         <div className="absolute bottom-2 right-2 bg-black/70 text-green-400 font-mono text-xs px-2 py-0.5 rounded" style={{ zIndex: 3 }}>
           {formatTime(cursorTime)}
         </div>
+      </div>
+
+      <div className="hidden">
+        {project.tracks.filter(t => t.type === 'audio').map(track => (
+          <audio key={track.id} ref={el => { audioRefs.current[track.id] = el; }} />
+        ))}
       </div>
 
       {/* Controls */}

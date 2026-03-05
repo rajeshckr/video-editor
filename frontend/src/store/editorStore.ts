@@ -27,6 +27,7 @@ interface EditorState {
   removeClip: (trackId: string, clipId: string) => void;
   moveClip: (fromTrackId: string, toTrackId: string, clipId: string, newPosition: number) => void;
   splitClip: (trackId: string, clipId: string, splitTime: number) => void;
+  extractAudioFromVideo: (trackId: string, clipId: string) => void;
   setCursorTime: (time: number) => void;
   setPlaybackState: (state: 'playing' | 'paused') => void;
   setSelectedClip: (clipId: string | null) => void;
@@ -170,6 +171,37 @@ export const useEditorStore = create<EditorState>()(
         srcEnd: clip.srcEnd + secondDuration,
       };
       track.clips.push(newClip);
+    }),
+
+    extractAudioFromVideo: (trackId, clipId) => set(state => {
+      const vTrack = state.project.tracks.find(t => t.id === trackId);
+      if (!vTrack) return;
+      const vClip = vTrack.clips.find(c => c.id === clipId);
+      if (!vClip || vClip.type !== 'video') return;
+
+      vClip.volume = 0; // mute the original video
+
+      // Find first audio track or create one if none exist
+      let aTrack = state.project.tracks.find(t => t.type === 'audio');
+      if (!aTrack) {
+        const maxNum = state.project.tracks.reduce((m, t) => Math.max(m, t.trackNumber), -1);
+        aTrack = {
+          id: uuidv4(), type: 'audio', trackNumber: maxNum + 1,
+          name: `Audio ${state.project.tracks.filter(t => t.type === 'audio').length + 1}`,
+          muted: false, visible: true, clips: []
+        };
+        state.project.tracks.push(aTrack);
+      }
+
+      const aClip: Clip = {
+        ...JSON.parse(JSON.stringify(vClip)),
+        id: uuidv4(),
+        trackId: aTrack.id,
+        trackNumber: aTrack.trackNumber,
+        type: 'audio',
+        volume: 1, // original volume
+      };
+      aTrack.clips.push(aClip);
     }),
 
     setCursorTime: (time) => set(state => { state.cursorTime = Math.max(0, time); }),
