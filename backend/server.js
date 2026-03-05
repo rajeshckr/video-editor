@@ -4,6 +4,9 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
+const Logger = require('./utils/logger');
+const logger = Logger.getInstance('Server');
+
 const config = require('./config');
 const uploadRouter = require('./routes/upload');
 const projectRouter = require('./routes/project');
@@ -38,6 +41,24 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// ─── Request logging middleware ────────────────────────────────────────────────
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  const originalJson = res.json;
+  
+  // Log response when it's sent
+  res.json = function(data) {
+    const duration = Date.now() - startTime;
+    logger.api(req.method, req.path, res.statusCode, {
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString()
+    });
+    return originalJson.call(this, data);
+  };
+  
+  next();
+});
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/upload', uploadRouter);
 app.use('/api/project', projectRouter);
@@ -59,18 +80,23 @@ app.get('/api/health', (req, res) => {
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error('[ERROR]', err.message);
+  logger.error(`Request failed: ${req.method} ${req.path}`, err);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 app.listen(config.port, async () => {
-  console.log(`[Server] Running on http://localhost:${config.port}`);
-  console.log(`[Server] FFmpeg: ${config.ffmpegPath}`);
-  console.log(`[Server] TMP:    ${config.tmpPath}`);
+  logger.info('🚀 Server starting');
+  logger.info(`Server running on http://localhost:${config.port}`);
+  logger.info(`FFmpeg: ${config.ffmpegPath}`);
+  logger.info(`TMP:    ${config.tmpPath}`);
   
   // Ensure AI models and binaries are ready
+  logger.info('Setting up Whisper...');
   await setupWhisper();
+  logger.info('Whisper setup complete');
   
+  logger.info('Starting cleanup service...');
   cleanupService.start();
+  logger.info('✅ Server ready');
 });

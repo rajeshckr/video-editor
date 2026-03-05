@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { execSync } = require('child_process');
+const Logger = require('./utils/logger');
+const logger = Logger.getInstance('Whisper-Setup');
 const config = require('./config');
 
 const WHISPER_ZIP_URL = 'https://github.com/ggerganov/whisper.cpp/releases/download/v1.6.0/whisper-bin-x64.zip';
@@ -35,15 +37,19 @@ function downloadFile(url, dest) {
 function extractZip(zipPath, destDir) {
   try {
     // Windows 10+ has native tar that can extract zips
+    logger.debug('Attempting to extract with native tar...');
     execSync(`tar -xf "${zipPath}" -C "${destDir}"`);
+    logger.debug('Successfully extracted zip with native tar');
     return true;
   } catch (err) {
-    console.error(`[WhisperSetup] Failed to extract zip natively, falling back...`, err.message);
+    logger.warn(`Failed to extract zip natively, falling back to PowerShell...`);
     try {
+      logger.debug('Attempting to extract with PowerShell Expand-Archive...');
       execSync(`powershell -command "Expand-Archive -Force '${zipPath}' '${destDir}'"`);
+      logger.debug('Successfully extracted zip with PowerShell');
       return true;
     } catch(err2) {
-      console.error(`[WhisperSetup] Failed to extract zip with powershell:`, err2.message);
+      logger.error(`Failed to extract zip with PowerShell`, err2);
       return false;
     }
   }
@@ -52,6 +58,7 @@ function extractZip(zipPath, destDir) {
 async function setupWhisper() {
   const toolsDir = config.toolsPath;
   if (!fs.existsSync(toolsDir)) {
+    logger.debug(`Creating Tools directory: ${toolsDir}`);
     fs.mkdirSync(toolsDir, { recursive: true });
   }
 
@@ -60,42 +67,52 @@ async function setupWhisper() {
   
   // 1. Download Model
   if (!fs.existsSync(modelPath)) {
-    console.log(`[WhisperSetup] Downloading Whisper model 'tiny.en' (~75MB)...`);
+    logger.info('📥 Downloading Whisper model "tiny.en" (~75MB)...');
+    logger.time('model-download');
     try {
       await downloadFile(WHISPER_MODEL_URL, modelPath);
-      console.log(`[WhisperSetup] Model downloaded successfully.`);
+      logger.timeEnd('model-download');
+      logger.info('✅ Model downloaded successfully.');
     } catch (err) {
-      console.error(`[WhisperSetup] Failed to download model:`, err);
+      logger.error(`Failed to download model`, err);
     }
   } else {
-    console.log(`[WhisperSetup] Whisper model 'tiny.en' already exists.`);
+    logger.info('ℹ️  Whisper model "tiny.en" already exists.');
   }
 
   // 2. Download and Extract Whisper Binary
   if (!fs.existsSync(whisperExePath)) {
-    console.log(`[WhisperSetup] Downloading whisper.cpp win-x64 release...`);
+    logger.info('📥 Downloading whisper.cpp win-x64 release...');
+    logger.time('whisper-download');
     const zipDest = path.join(toolsDir, 'whisper-temp.zip');
     try {
       await downloadFile(WHISPER_ZIP_URL, zipDest);
-      console.log(`[WhisperSetup] Extracting whisper.cpp...`);
+      logger.timeEnd('whisper-download');
+      logger.info('📦 Extracting whisper.cpp...');
+      logger.time('whisper-extract');
       
       const success = extractZip(zipDest, toolsDir);
       
       if (success && fs.existsSync(path.join(toolsDir, 'main.exe'))) {
+        logger.timeEnd('whisper-extract');
+        logger.debug('Renaming main.exe to whisper.exe');
         fs.renameSync(path.join(toolsDir, 'main.exe'), whisperExePath);
-        console.log(`[WhisperSetup] Whisper binary installed successfully.`);
+        logger.info('✅ Whisper binary installed successfully.');
       } else {
-         console.error(`[WhisperSetup] Failed to locate extracted main.exe.`);
+        logger.error(`Failed to locate extracted main.exe.`);
       }
 
       // Cleanup
-      if (fs.existsSync(zipDest)) fs.unlinkSync(zipDest);
+      if (fs.existsSync(zipDest)) {
+        logger.debug('Cleaning up temp zip file');
+        fs.unlinkSync(zipDest);
+      }
       
     } catch (err) {
-      console.error(`[WhisperSetup] Failed to download/extract whisper binary:`, err);
+      logger.error(`Failed to download/extract whisper binary`, err);
     }
   } else {
-    console.log(`[WhisperSetup] whisper.exe already exists.`);
+    logger.info('ℹ️  whisper.exe already exists.');
   }
 }
 

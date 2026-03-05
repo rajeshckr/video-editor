@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import Logger from './utils/logger';
 import Toolbar from './components/Toolbar';
 import MediaLibrary from './components/MediaLibrary';
 import PreviewPlayer from './components/PreviewPlayer';
@@ -9,10 +10,20 @@ import SnackbarUI from './components/SnackbarUI';
 import PropertiesPanel from './components/PropertiesPanel';
 import { useEditorStore } from './store/editorStore';
 
+const logger = Logger.getInstance('App');
+
 export default function App() {
   const {
     project, exportPanelOpen, textEditorOpen, setPlaybackState, playbackState, addSnackbar
   } = useEditorStore();
+
+  // Log app initialization
+  useEffect(() => {
+    logger.info('🚀 Video Editor Application Loaded', { 
+      timestamp: new Date().toISOString(),
+      message: 'All systems ready. Type __logs.help() in console for debug tools.'
+    });
+  }, []);
 
   // Ref to keep track of the latest project state for the autosave interval
   const projRef = useRef(project);
@@ -64,7 +75,8 @@ export default function App() {
       {/* Middle section: Media Library + Preview + Properties */}
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {/* Media Library */}
-        <div className="w-64 flex-shrink-0 border-r border-[#30363d] overflow-auto">
+        {/* eslint-disable-next-line tailwindcss/classnames-order */}
+        <div className="w-64 shrink-0 border-r border-[#30363d] overflow-auto">
           <MediaLibrary />
         </div>
 
@@ -76,7 +88,8 @@ export default function App() {
         </div>
 
         {/* Properties Panel */}
-        <div className="w-56 flex-shrink-0 border-l border-[#30363d] overflow-auto">
+        {/* eslint-disable-next-line tailwindcss/classnames-order */}
+        <div className="w-56 shrink-0 border-l border-[#30363d] overflow-auto">
           <PropertiesPanel />
         </div>
       </div>

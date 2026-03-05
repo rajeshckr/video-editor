@@ -1,6 +1,9 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
+import Logger from '../utils/logger';
 import type { Clip } from '../types';
+
+const logger = Logger.getInstance('Timeline');
 
 const TRACK_LABEL_W = 240;
 const TRACK_H = 52;
@@ -147,46 +150,72 @@ export default function Timeline() {
 
   // ── Auto-Captioning ────────────────────────────────────────────────────────
   const handleAutoCaption = async (clip: Clip) => {
+    logger.action('Request auto caption', 'PENDING', { clipName: clip.originalName, filePath: clip.filePath });
     setIsCaptioning(prev => ({ ...prev, [clip.id]: true }));
     addSnackbar('info', `Running Whisper AI to generate captions... (This might take a minute)`);
     setContextMenu(null);
 
     try {
+      logger.info('Sending caption request to backend', { filePath: clip.filePath });
       const resp = await fetch(`http://localhost:3001/api/caption`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filePath: clip.filePath })
       });
 
+      logger.api('POST', '/api/caption', resp.status, { filePath: clip.filePath });
+
       if (!resp.ok) {
         const err = await resp.json().catch(()=>({}));
-        throw new Error(err.error || `HTTP ${resp.status}`);
+        const errorMsg = err.error || `HTTP ${resp.status}`;
+        logger.error(`Caption request failed with status ${resp.status}`, new Error(errorMsg));
+        throw new Error(errorMsg);
       }
 
       const { captions } = await resp.json();
+      logger.info(`Received ${captions?.length || 0} captions from backend`);
+      
       if (!captions || captions.length === 0) {
-        throw new Error("No speech detected or parsing failed.");
+        const errMsg = "No speech detected or parsing failed.";
+        logger.error('Caption generation returned empty result', new Error(errMsg));
+        throw new Error(errMsg);
       }
+
+      logger.info(`Processing ${captions.length} captions for insertion`);
 
       // Ensure we have an overlay track for the captions
       let overlayTrack = project.tracks.find(t => t.type === 'overlay' && t.name === 'Captions');
       if (!overlayTrack) {
+        logger.info('Creating new Captions overlay track');
         addTrack('overlay');
-        overlayTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'overlay' && t.name === 'Overlay 1'); // Get the newly created one
-        if (overlayTrack) {
-          overlayTrack.name = 'Captions';
+        const newTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'overlay' && t.name.includes('Overlay')); // Get the newly created one
+        if (newTrack) {
+          // Use the store method to safely update track name
+          useEditorStore.getState().updateTrack(newTrack.id, { name: 'Captions' });
+          overlayTrack = useEditorStore.getState().project.tracks.find(t => t.id === newTrack.id);
+          logger.info('Captions track created and named');
         } else {
-           overlayTrack = project.tracks.find(t => t.type === 'overlay'); 
+           overlayTrack = project.tracks.find(t => t.type === 'overlay');
         }
       }
 
-      if (!overlayTrack) throw new Error("Could not find or create an overlay track");
+      if (!overlayTrack) {
+        const errMsg = "Could not find or create an overlay track";
+        logger.error(errMsg, new Error(errMsg));
+        throw new Error(errMsg);
+      }
 
       // Insert all generated captions as editable text clips
       captions.forEach((cap: any, index: number) => {
-        if (!cap.text || cap.text.trim() === '') return;
+        if (!cap.text || cap.text.trim() === '') {
+          logger.debug(`Skipping empty caption at index ${index}`);
+          return;
+        }
         const duration = cap.end - cap.start;
-        if (duration <= 0) return;
+        if (duration <= 0) {
+          logger.debug(`Skipping caption with invalid duration at index ${index}: ${duration}`);
+          return;
+        }
 
         const newClip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
            type: 'text',
@@ -211,10 +240,11 @@ export default function Timeline() {
         addClipToTrack(overlayTrack.id, newClip);
       });
 
+      logger.action('Auto caption', 'SUCCESS', { clipName: clip.originalName, captionCount: captions.length });
       addSnackbar('success', `Generated ${captions.length} captions successfully!`);
 
     } catch (err: any) {
-      console.error(err);
+      logger.error(`Caption generation failed`, err);
       addSnackbar('error', `Captions failed: ${err.message}`);
     } finally {
       setIsCaptioning(prev => ({ ...prev, [clip.id]: false }));
@@ -224,7 +254,8 @@ export default function Timeline() {
   return (
     <div className="flex flex-col h-full bg-[#0d1117] overflow-hidden">
       {/* Zoom controls */}
-      <div className="flex items-center gap-2 px-3 py-1 border-b border-[#30363d] flex-shrink-0">
+      {/* eslint-disable-next-line tailwindcss/classnames-order */}
+      <div className="flex items-center gap-2 px-3 py-1 border-b border-[#30363d] shrink-0">
         <span className="text-[10px] text-[#8b949e]">Zoom</span>
         <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 0.8)}>−</button>
         <input type="range" min={20} max={300} value={zoom} onChange={e => setZoom(Number(e.target.value))}
@@ -269,7 +300,8 @@ export default function Timeline() {
                 }}
                 onDragEnd={() => setDraggedTrackId(null)}
               >
-                <div className="cursor-grab text-[#8b949e] px-1 opacity-50 hover:opacity-100 flex-shrink-0" title="Drag to reorder track">
+                {/* eslint-disable-next-line tailwindcss/classnames-order */}
+                <div className="cursor-grab text-[#8b949e] px-1 opacity-50 hover:opacity-100 shrink-0" title="Drag to reorder track">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16"/></svg>
                 </div>
                 <span className="text-xs text-[#e6edf3] flex-1 truncate font-medium ml-1 select-none pointer-events-none">{track.name}</span>
