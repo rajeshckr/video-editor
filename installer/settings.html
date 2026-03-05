@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CutStudio Settings</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Inter,system-ui,sans-serif;background:#0d1117;color:#e6edf3;padding:24px;font-size:13px}
+  h1{font-size:15px;font-weight:600;color:#fff;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  h1 span.badge{background:#3b82f6;color:#fff;font-size:10px;padding:2px 6px;border-radius:99px;font-weight:500}
+  .subtitle{color:#8b949e;font-size:11px;margin-bottom:20px}
+  .section{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:12px}
+  .section h2{font-size:11px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+  label{display:block;color:#8b949e;font-size:11px;margin-bottom:4px;margin-top:10px}
+  label:first-of-type{margin-top:0}
+  input[type=number],input[type=text]{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;padding:7px 10px;font-size:13px;outline:none}
+  input:focus{border-color:#3b82f6}
+  .row{display:flex;gap:8px;align-items:center}
+  .row input{flex:1}
+  button{cursor:pointer;border:none;border-radius:6px;font-size:12px;font-weight:500;padding:7px 14px;transition:background .15s}
+  .btn-browse{background:#21262d;color:#e6edf3;border:1px solid #30363d}
+  .btn-browse:hover{background:#30363d}
+  .check-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .check-row input[type=checkbox]{accent-color:#3b82f6;width:14px;height:14px}
+  .check-row span{color:#e6edf3;font-size:12px}
+  .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .dot-on{background:#22c55e} .dot-off{background:#6b7280}
+  .server-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+  .btn-save{background:#3b82f6;color:#fff}.btn-save:hover{background:#2563eb}
+  .btn-cancel{background:#21262d;color:#e6edf3;border:1px solid #30363d}.btn-cancel:hover{background:#30363d}
+  #msg{font-size:11px;color:#22c55e;margin-top:8px;min-height:16px}
+</style>
+</head>
+<body>
+<h1>⚙ CutStudio Settings <span class="badge">v1.0</span></h1>
+<p class="subtitle">Configure the local backend server</p>
+
+<div class="section">
+  <h2>Server</h2>
+  <label>Port (default: 3001)</label>
+  <input type="number" id="port" min="1024" max="65535" value="3001"/>
+
+  <div class="server-row">
+    <div class="status-dot" id="dot"></div>
+    <span id="statusLabel">Checking…</span>
+    <button id="toggleBtn" style="margin-left:auto;background:#21262d;color:#e6edf3;border:1px solid #30363d" onclick="toggleServer()">—</button>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Storage</h2>
+  <label>TMP Folder (temporary files &amp; renders)</label>
+  <div class="row">
+    <input type="text" id="tmpPath" readonly/>
+    <button class="btn-browse" onclick="pickFolder()">Browse…</button>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Startup</h2>
+  <div class="check-row">
+    <input type="checkbox" id="autoStart"/>
+    <span>Start server automatically when CutStudio opens</span>
+  </div>
+  <div class="check-row">
+    <input type="checkbox" id="openOnStart"/>
+    <span>Open editor in browser when server starts</span>
+  </div>
+  <div class="check-row">
+    <input type="checkbox" id="loginItem"/>
+    <span>Launch CutStudio at Windows login</span>
+  </div>
+</div>
+
+<div id="msg"></div>
+<div class="footer">
+  <button class="btn-cancel" onclick="window.close()">Cancel</button>
+  <button class="btn-save" onclick="save()">Save &amp; Apply</button>
+</div>
+
+<script>
+async function load() {
+  const s = await window.api.getSettings();
+  document.getElementById('port').value       = s.port;
+  document.getElementById('tmpPath').value    = s.tmpPath;
+  document.getElementById('autoStart').checked  = s.autoStartServer;
+  document.getElementById('openOnStart').checked = s.openOnStart;
+  document.getElementById('loginItem').checked  = s.autoStartServer;
+  await refreshStatus();
+}
+
+async function refreshStatus() {
+  const running = await window.api.serverStatus();
+  const dot = document.getElementById('dot');
+  const lbl = document.getElementById('statusLabel');
+  const btn = document.getElementById('toggleBtn');
+  dot.className = 'status-dot ' + (running ? 'dot-on' : 'dot-off');
+  lbl.textContent = running ? 'Server is running' : 'Server is stopped';
+  btn.textContent = running ? 'Stop' : 'Start';
+}
+
+async function toggleServer() {
+  const running = await window.api.serverStatus();
+  if (running) await window.api.stopServer();
+  else await window.api.startServer();
+  setTimeout(refreshStatus, 600);
+}
+
+async function pickFolder() {
+  const p = await window.api.pickFolder();
+  if (p) document.getElementById('tmpPath').value = p;
+}
+
+async function save() {
+  const settings = {
+    port:            parseInt(document.getElementById('port').value),
+    tmpPath:         document.getElementById('tmpPath').value,
+    autoStartServer: document.getElementById('autoStart').checked,
+    openOnStart:     document.getElementById('openOnStart').checked,
+  };
+  const r = await window.api.saveSettings(settings);
+  const msg = document.getElementById('msg');
+  msg.textContent = r.restarted ? '✔ Saved — server restarted.' : '✔ Saved.';
+  setTimeout(() => { msg.textContent = ''; }, 3000);
+  await refreshStatus();
+}
+
+load();
+setInterval(refreshStatus, 3000);
+</script>
+</body>
+</html>

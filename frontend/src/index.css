@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+
+:root {
+  --editor-bg: #0d1117;
+  --editor-panel: #161b22;
+  --editor-panel2: #1c2128;
+  --editor-border: #30363d;
+  --editor-accent: #3b82f6;
+  --editor-accent-hover: #2563eb;
+  --editor-text: #e6edf3;
+  --editor-muted: #8b949e;
+  --clip-video: #6d28d9;
+  --clip-video-border: #7c3aed;
+  --clip-audio: #0e7490;
+  --clip-audio-border: #0891b2;
+  --clip-image: #b45309;
+  --clip-image-border: #d97706;
+  --clip-text-bg: #92400e;
+  --clip-text-border: #b45309;
+  --playhead: #ef4444;
+  --in-point: #22c55e;
+  --out-point: #ef4444;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--editor-bg); }
+::-webkit-scrollbar-thumb { background: var(--editor-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--editor-muted); }
+
+/* Timeline clip resize handles */
+.clip-handle {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 6px;
+  background: rgba(255,255,255,0.3);
+  cursor: ew-resize;
+  z-index: 10;
+  border-radius: 2px;
+}
+.clip-handle-left { left: 0; }
+.clip-handle-right { right: 0; }
+
+/* Waveform placeholder */
+.waveform-bg {
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    rgba(255,255,255,0.08) 2px,
+    rgba(255,255,255,0.08) 3px
+  );
+}
+
+/* Thumbnail strip */
+.thumb-strip {
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0,0,0,0.3) 0px,
+    rgba(0,0,0,0.3) 1px,
+    transparent 1px,
+    transparent 60px
+  );
+}
+
+/* Animations */
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+
+/* Button base */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--editor-accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--editor-accent-hover); }
+.btn-ghost { background: transparent; color: var(--editor-muted); }
+.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.07); color: var(--editor-text); }
+.btn-danger { background: #7f1d1d; color: #fca5a5; }
+.btn-danger:hover:not(:disabled) { background: #991b1b; }
+
+/* Input fields */
+.input {
+  background: var(--editor-bg);
+  border: 1px solid var(--editor-border);
+  border-radius: 0.375rem;
+  color: var(--editor-text);
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  outline: none;
+  width: 100%;
+}
+.input:focus { border-color: var(--editor-accent); }
+
+/* Panel */
+.panel {
+  background: var(--editor-panel);
+  border: 1px solid var(--editor-border);
+  border-radius: 0.5rem;
+}
+
+/* Track colors */
+.track-video { border-left: 3px solid var(--clip-video); }
+.track-audio { border-left: 3px solid var(--clip-audio); }
+.track-overlay { border-left: 3px solid var(--clip-image); }
