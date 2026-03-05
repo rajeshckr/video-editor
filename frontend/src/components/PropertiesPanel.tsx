@@ -79,13 +79,36 @@ export default function PropertiesPanel() {
         )}
 
         {/* Opacity */}
-        <div className="space-y-2">
-          <div className="text-[#8b949e] font-medium">Visual</div>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[#8b949e]">Opacity: {Math.round((selectedClip.opacity ?? 1) * 100)}%</span>
-            <input type="range" min={0} max={1} step={0.01} value={selectedClip.opacity ?? 1}
-              onChange={e => update('opacity', parseFloat(e.target.value))} className="accent-blue-500" />
-          </label>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="text-[#8b949e] font-medium">Visual</div>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[#8b949e]">Opacity: {Math.round((selectedClip.opacity ?? 1) * 100)}%</span>
+              <input type="range" min={0} max={1} step={0.01} value={selectedClip.opacity ?? 1}
+                onChange={e => update('opacity', parseFloat(e.target.value))} className="accent-blue-500" />
+            </label>
+          </div>
+
+          {selectedClip.type === 'image' && (
+            <div className="space-y-2">
+              <div className="text-[#8b949e] font-medium">Transform</div>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[#8b949e]">X Position: {Math.round(selectedClip.transform?.x ?? 0)}</span>
+                <input type="range" min={-project.resolution.width} max={project.resolution.width} step={1} value={selectedClip.transform?.x ?? 0}
+                  onChange={e => update('transform', { ...(selectedClip.transform || {y:0,scale:1,rotation:0}), x: parseFloat(e.target.value) })} className="accent-blue-500" />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[#8b949e]">Y Position: {Math.round(selectedClip.transform?.y ?? 0)}</span>
+                <input type="range" min={-project.resolution.height} max={project.resolution.height} step={1} value={selectedClip.transform?.y ?? 0}
+                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,scale:1,rotation:0}), y: parseFloat(e.target.value) })} className="accent-blue-500" />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[#8b949e]">Scale: {Math.round((selectedClip.transform?.scale ?? 1)*100)}%</span>
+                <input type="range" min={0.1} max={5} step={0.05} value={selectedClip.transform?.scale ?? 1}
+                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,y:0,rotation:0}), scale: parseFloat(e.target.value) })} className="accent-blue-500" />
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Text-clip editor shortcut */}

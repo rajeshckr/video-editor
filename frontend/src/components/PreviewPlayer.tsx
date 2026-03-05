@@ -11,6 +11,7 @@ export default function PreviewPlayer() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
+  const imageCache = useRef<Record<string, HTMLImageElement>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const startWallRef = useRef<number>(0);
@@ -52,12 +53,64 @@ export default function PreviewPlayer() {
       for (const clip of track.clips) {
         if (t < clip.timelinePosition || t >= clip.timelinePosition + clip.timelineDuration) continue;
 
-        if (clip.type === 'image' && clip.thumbnail) {
-          const img = new Image();
-          img.src = `${API}${clip.thumbnail}`;
-          ctx.globalAlpha = clip.opacity ?? 1;
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          ctx.globalAlpha = 1;
+        if (clip.type === 'video') {
+          const vid = videoRef.current;
+          if (vid && vid.readyState >= 2) {
+            // Check if this clip is the currently playing video in the hidden video element
+            const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+            if (vid.src.includes(src.split('/').pop()!)) {
+              ctx.save();
+              ctx.globalAlpha = clip.opacity ?? 1;
+              
+              const tr = clip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
+              // Calculate natural aspect ratio fitting
+              const vw = vid.videoWidth;
+              const vh = vid.videoHeight;
+              const scaleToFit = Math.min(canvas.width / (vw || 1), canvas.height / (vh || 1));
+              const iw = vw * scaleToFit * tr.scale;
+              const ih = vh * scaleToFit * tr.scale;
+              const cx = canvas.width / 2 + tr.x;
+              const cy = canvas.height / 2 + tr.y;
+
+              ctx.translate(cx, cy);
+              ctx.rotate(tr.rotation * Math.PI / 180);
+              ctx.drawImage(vid, -iw / 2, -ih / 2, iw, ih);
+              ctx.restore();
+            }
+          }
+        }
+
+        if (clip.type === 'image') {
+          const filename = clip.filePath.split(/[\\/]/).pop();
+          if (filename) {
+            let img = imageCache.current[filename];
+            if (!img) {
+              img = new Image();
+              img.onload = () => {
+                const liveProj = useEditorStore.getState().project;
+                const liveTime = useEditorStore.getState().cursorTime;
+                drawOverlays(liveTime, liveProj);
+              };
+              img.src = `${API}/api/upload/file/${filename}`;
+              imageCache.current[filename] = img;
+            }
+            if (img.complete && img.naturalHeight !== 0) {
+              ctx.save();
+              ctx.globalAlpha = clip.opacity ?? 1;
+              
+              const tr = clip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
+              const scaleToFit = Math.min(canvas.width / (img.naturalWidth || 1), canvas.height / (img.naturalHeight || 1));
+              const iw = img.naturalWidth * scaleToFit * tr.scale;
+              const ih = img.naturalHeight * scaleToFit * tr.scale;
+              const cx = canvas.width / 2 + tr.x;
+              const cy = canvas.height / 2 + tr.y;
+
+              ctx.translate(cx, cy);
+              ctx.rotate(tr.rotation * Math.PI / 180);
+              ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
+              ctx.restore();
+            }
+          }
         }
 
         if (clip.type === 'text') {
@@ -89,7 +142,11 @@ export default function PreviewPlayer() {
         vid.muted = track?.muted || false;
         vid.volume = clip.volume ?? 1;
         const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
-        if (!vid.src.includes(clip.filePath.split(/[\\/]/).pop()!)) { vid.src = src; vid.load(); }
+        if (!vid.src.includes(src.split('/').pop()!)) { 
+          vid.src = src; 
+          vid.load();
+          vid.onloadeddata = () => drawOverlays(cursorTime, project);
+        }
         const clipOffset = cursorTime - clip.timelinePosition + clip.srcStart;
         if (Math.abs(vid.currentTime - clipOffset) > 0.1) vid.currentTime = clipOffset;
       } else {
@@ -212,17 +269,16 @@ export default function PreviewPlayer() {
         style={{ width: '100%', maxWidth: '640px', aspectRatio: `${aspect}` }}>
         <video
           ref={videoRef}
-          className="absolute inset-0 w-full h-full object-contain"
-          style={{ zIndex: 1 }}
+          className="absolute inset-0 w-full h-full object-contain opacity-0 pointer-events-none"
           playsInline
           muted={false}
         />
         <canvas
           ref={canvasRef}
-          width={640}
-          height={Math.round(640 / aspect)}
-          className="absolute inset-0 w-full h-full"
-          style={{ zIndex: 2, pointerEvents: 'none' }}
+          width={W}
+          height={H}
+          className="absolute inset-0 w-full h-full object-contain"
+          style={{ zIndex: 2 }}
         />
         {/* Timecode overlay */}
         <div className="absolute bottom-2 right-2 bg-black/70 text-green-400 font-mono text-xs px-2 py-0.5 rounded" style={{ zIndex: 3 }}>

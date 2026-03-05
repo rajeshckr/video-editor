@@ -6,7 +6,7 @@ export default function Toolbar() {
   const {
     project, updateProjectName, setPlaybackState, playbackState,
     cursorTime, setCursorTime, setExportPanelOpen, undo, redo,
-    addTrack, splitClip, selectedClipId, project: { tracks }, addSnackbar
+    addTrack, splitClip, selectedClipId, project: { tracks }, addSnackbar, setTextEditorOpen
   } = useEditorStore();
 
   const formatTime = (s: number) => {
@@ -110,9 +110,19 @@ export default function Toolbar() {
       </button>
 
       {/* Add Track */}
-      <button className="btn btn-ghost p-1.5 text-xs" onClick={() => addTrack('video')} title="Add Video Track">+ Video</button>
-      <button className="btn btn-ghost p-1.5 text-xs" onClick={() => addTrack('audio')} title="Add Audio Track">+ Audio</button>
-      <button className="btn btn-ghost p-1.5 text-xs" onClick={() => addTrack('overlay')} title="Add Overlay Track">+ Overlay</button>
+      <button className="btn btn-ghost p-1.5 text-xs flex items-center gap-1" onClick={() => addTrack('video')} title="Add Video Track">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+      </button>
+      <button className="btn btn-ghost p-1.5 text-xs flex items-center gap-1" onClick={() => addTrack('audio')} title="Add Audio Track">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+      </button>
+
+      <div className="w-px h-6 bg-[#30363d] mx-1" />
+
+      {/* Add Elements */}
+      <button className="btn btn-ghost p-1.5 text-xs font-semibold" onClick={() => setTextEditorOpen(true)} title="Add Text Overlay">
+        + Text
+      </button>
 
       <div className="flex-1" />
 

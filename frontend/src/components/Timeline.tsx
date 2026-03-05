@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import type { Clip } from '../types';
 
-const TRACK_LABEL_W = 160;
+const TRACK_LABEL_W = 240;
 const TRACK_H = 52;
 const RULER_H = 28;
 
@@ -16,6 +16,7 @@ export default function Timeline() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<{ type: 'playhead' | 'inpoint' | 'outpoint' | 'clip' | 'clipresize'; clipId?: string; trackId?: string; edge?: 'left' | 'right'; startX: number; startTime: number; startDuration?: number; startSrc?: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clip: Clip, trackId: string } | null>(null);
+  const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
 
   const timeToX = (t: number) => t * zoom;
   const xToTime = (x: number) => Math.max(0, x / zoom);
@@ -165,10 +166,35 @@ export default function Timeline() {
               <span className="text-[10px] text-[#8b949e]">Tracks</span>
             </div>
             {/* Track labels */}
-            {project.tracks.map(track => (
-              <div key={track.id} style={{ height: TRACK_H, borderBottom: '1px solid #30363d' }}
-                className={`flex items-center px-2 gap-1 track-${track.type}`}>
-                <span className="text-xs text-[#e6edf3] flex-1 truncate">{track.name}</span>
+            {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => (
+              <div 
+                key={track.id} 
+                style={{ height: TRACK_H, borderBottom: '1px solid #30363d' }}
+                className={`flex items-center px-1 gap-1 track-${track.type} ${draggedTrackId === track.id ? 'opacity-50' : ''}`}
+                draggable
+                onDragStart={(e) => {
+                  setDraggedTrackId(track.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('track/id', track.id);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const draggedId = e.dataTransfer.getData('track/id');
+                  if (draggedId && draggedId !== track.id) {
+                    useEditorStore.getState().reorderTrack(draggedId, track.id);
+                  }
+                  setDraggedTrackId(null);
+                }}
+                onDragEnd={() => setDraggedTrackId(null)}
+              >
+                <div className="cursor-grab text-[#8b949e] px-1 opacity-50 hover:opacity-100 flex-shrink-0" title="Drag to reorder track">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16"/></svg>
+                </div>
+                <span className="text-xs text-[#e6edf3] flex-1 truncate font-medium ml-1 select-none pointer-events-none">{track.name}</span>
                 {track.type !== 'audio' && (
                   <button className="btn btn-ghost p-0.5" title="Toggle visibility"
                     onClick={() => useEditorStore.getState().toggleTrackVisible(track.id)}>
@@ -226,7 +252,7 @@ export default function Timeline() {
             </svg>
 
             {/* Track rows */}
-            {project.tracks.map(track => (
+            {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => (
               <div
                 key={track.id}
                 style={{ height: TRACK_H, width: totalWidth, position: 'relative', borderBottom: '1px solid #1c2128', background: '#0d1117' }}

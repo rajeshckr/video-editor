@@ -25,6 +25,7 @@ interface EditorState {
   addClipToTrack: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'>) => void;
   updateClip: (trackId: string, clipId: string, updates: Partial<Clip>) => void;
   removeClip: (trackId: string, clipId: string) => void;
+  reorderTrack: (draggedId: string, targetId: string) => void;
   moveClip: (fromTrackId: string, toTrackId: string, clipId: string, newPosition: number) => void;
   splitClip: (trackId: string, clipId: string, splitTime: number) => void;
   extractAudioFromVideo: (trackId: string, clipId: string) => void;
@@ -94,6 +95,29 @@ export const useEditorStore = create<EditorState>()(
 
     removeTrack: (trackId) => set(state => {
       state.project.tracks = state.project.tracks.filter(t => t.id !== trackId);
+    }),
+
+    reorderTrack: (draggedId, targetId) => set(state => {
+      const draggedIdx = state.project.tracks.findIndex(t => t.id === draggedId);
+      const targetIdx = state.project.tracks.findIndex(t => t.id === targetId);
+      if (draggedIdx < 0 || targetIdx < 0 || draggedIdx === targetIdx) return;
+      
+      const sortedTracks = [...state.project.tracks].sort((a, b) => b.trackNumber - a.trackNumber);
+      const fromI = sortedTracks.findIndex(t => t.id === draggedId);
+      const toI = sortedTracks.findIndex(t => t.id === targetId);
+      
+      const [moved] = sortedTracks.splice(fromI, 1);
+      sortedTracks.splice(toI, 0, moved);
+      
+      const numTracks = sortedTracks.length;
+      sortedTracks.forEach((t, i) => {
+        const newNum = numTracks - 1 - i;
+        const stateTrack = state.project.tracks.find(st => st.id === t.id);
+        if (stateTrack) {
+          stateTrack.trackNumber = newNum;
+          stateTrack.clips.forEach(c => c.trackNumber = newNum);
+        }
+      });
     }),
 
     addClipToTrack: (trackId, clipData) => set(state => {
