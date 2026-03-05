@@ -5,26 +5,42 @@ import PreviewPlayer from './components/PreviewPlayer';
 import Timeline from './components/Timeline';
 import TextClipEditor from './components/TextClipEditor';
 import ExportPanel from './components/ExportPanel';
+import SnackbarUI from './components/SnackbarUI';
 import PropertiesPanel from './components/PropertiesPanel';
 import { useEditorStore } from './store/editorStore';
 
 export default function App() {
-  const { 
-    project, exportPanelOpen, textEditorOpen, setPlaybackState, playbackState
+  const {
+    project, exportPanelOpen, textEditorOpen, setPlaybackState, playbackState, addSnackbar
   } = useEditorStore();
+
+  // Ref to keep track of the latest project state for the autosave interval
+  const projRef = useRef(project);
+  useEffect(() => {
+    projRef.current = project;
+  }, [project]);
 
   // Auto-save project every 30 seconds
   const saveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    saveRef.current = setInterval(() => {
-      fetch('http://localhost:3001/api/project/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(project),
-      }).catch(() => {});
+    saveRef.current = setInterval(async () => {
+      try {
+        const resp = await fetch('http://localhost:3001/api/project/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(projRef.current),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          addSnackbar('error', `Autosave failing: ${data.error || resp.status}`);
+        }
+      } catch (e: any) { 
+        console.error('Autosave failed:', e);
+        // Only show message occasionally to avoid spamming if server is fully down
+      }
     }, 30000);
     return () => { if (saveRef.current) clearInterval(saveRef.current); };
-  }, [project]);
+  }, [addSnackbar]); // addSnackbar is a stable function, so it's safe to include
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -73,6 +89,7 @@ export default function App() {
       {/* Modals */}
       {textEditorOpen && <TextClipEditor />}
       {exportPanelOpen && <ExportPanel />}
+      <SnackbarUI />
     </div>
   );
 }

@@ -85,7 +85,9 @@ router.get('/download/:jobId', (req, res) => {
   if (!fs.existsSync(job.outputPath)) {
     return res.status(404).json({ error: 'Output file missing' });
   }
-  res.download(job.outputPath, job.outputFilename);
+  res.download(path.resolve(job.outputPath), job.outputFilename, err => {
+    if (err) console.error(`[Error sending download] ${job.outputPath}:`, err.message);
+  });
 });
 
 module.exports = router;

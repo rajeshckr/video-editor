@@ -142,7 +142,9 @@ router.get('/thumbnail/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
   const thumbPath = path.join(config.thumbnailsPath, filename);
   if (!fs.existsSync(thumbPath)) return res.status(404).json({ error: 'Not found' });
-  res.sendFile(thumbPath);
+  res.sendFile(path.resolve(thumbPath), err => {
+    if (err) console.error(`[Error sending thumbnail] ${thumbPath}:`, err.message);
+  });
 });
 
 // ─── GET /api/upload/file/:filename ──────────────────────────────────────────
@@ -150,7 +152,9 @@ router.get('/file/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
   const filePath = path.join(config.uploadsPath, filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Not found' });
-  res.sendFile(filePath);
+  res.sendFile(path.resolve(filePath), err => {
+    if (err) console.error(`[Error sending file] ${filePath}:`, err.message);
+  });
 });
 
 module.exports = router;

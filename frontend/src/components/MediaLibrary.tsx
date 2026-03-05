@@ -7,21 +7,25 @@ const API = 'http://localhost:3001';
 const ALLOWED = ['mp4','mov','mkv','webm','mp3','wav','aac','jpg','jpeg','png','webp'];
 
 export default function MediaLibrary() {
-  const { assets, addAsset, project, addClipToTrack } = useEditorStore();
+  const { assets, addAsset, project, addClipToTrack, addSnackbar } = useEditorStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
   const uploadFile = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    if (!ALLOWED.includes(ext)) { alert(`File type .${ext} not supported`); return; }
+    if (!ALLOWED.includes(ext)) { addSnackbar('error', `File type .${ext} not supported`); return; }
     const formData = new FormData();
     formData.append('file', file);
     try {
       const res = await fetch(`${API}/api/upload`, { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.success) addAsset(data.asset as AssetMeta);
-      else alert(data.error || 'Upload failed');
-    } catch (e) { alert('Upload failed: ' + e); }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        addAsset(data.asset as AssetMeta);
+        addSnackbar('success', `Added ${file.name}`);
+      } else {
+        addSnackbar('error', `Upload failed: ${data.error || `HTTP error ${res.status}`}`);
+      }
+    } catch (e: any) { addSnackbar('error', `Upload error: ${e.message || e}`); }
   };
 
   const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,7 +117,7 @@ export default function MediaLibrary() {
                 // Find first compatible track
                 const trackType = asset.type === 'audio' ? 'audio' : (asset.type === 'image' ? 'overlay' : 'video');
                 const track = project.tracks.find(t => t.type === trackType);
-                if (!track) { alert(`No ${trackType} track found. Add one from the toolbar.`); return; }
+                if (!track) { addSnackbar('error', `No ${trackType} track found. Add one from the toolbar.`); return; }
                 // Find first free position
                 const pos = track.clips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
                 const clipData: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {

@@ -6,7 +6,7 @@ export default function Toolbar() {
   const {
     project, updateProjectName, setPlaybackState, playbackState,
     cursorTime, setCursorTime, setExportPanelOpen, undo, redo,
-    addTrack, splitClip, selectedClipId, project: { tracks }
+    addTrack, splitClip, selectedClipId, project: { tracks }, addSnackbar
   } = useEditorStore();
 
   const formatTime = (s: number) => {
@@ -19,20 +19,32 @@ export default function Toolbar() {
 
   const handleSave = async () => {
     try {
-      await fetch(`${API}/api/project/save`, {
+      const resp = await fetch(`${API}/api/project/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(project),
       });
-    } catch (e) { alert('Save failed'); }
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${resp.status}`);
+      }
+      addSnackbar('success', 'Project saved successfully');
+    } catch (e: any) { addSnackbar('error', `Save failed: ${e.message || e}`); }
   };
 
   const handleLoad = async () => {
     try {
       const res = await fetch(`${API}/api/project/load`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${res.status}`);
+      }
       const { project: loaded } = await res.json();
-      if (loaded) useEditorStore.getState().loadProject(loaded, loaded.assets || []);
-    } catch (e) { alert('Load failed'); }
+      if (loaded) {
+        useEditorStore.getState().loadProject(loaded, loaded.assets || []);
+        addSnackbar('success', 'Project loaded successfully');
+      }
+    } catch (e: any) { addSnackbar('error', `Load failed: ${e.message || e}`); }
   };
 
   const handleSplit = () => {

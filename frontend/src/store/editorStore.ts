@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { v4 as uuidv4 } from 'uuid';
-import type { Clip, Track, AssetMeta, Project } from '../types';
+import type { Clip, Track, AssetMeta, Project, SnackbarMessage } from '../types';
 
 interface EditorState {
   project: Project;
@@ -14,8 +14,11 @@ interface EditorState {
   exportPanelOpen: boolean;
   history: Project[];
   historyIndex: number;
+  snackbars: SnackbarMessage[];
 
   // Actions
+  addSnackbar: (type: SnackbarMessage['type'], message: string) => void;
+  removeSnackbar: (id: string) => void;
   addAsset: (asset: AssetMeta) => void;
   addTrack: (type: Track['type']) => void;
   removeTrack: (trackId: string) => void;
@@ -67,6 +70,15 @@ export const useEditorStore = create<EditorState>()(
     exportPanelOpen: false,
     history: [],
     historyIndex: -1,
+    snackbars: [],
+
+    addSnackbar: (type, message) => set(state => {
+      state.snackbars.push({ id: uuidv4(), type, message });
+    }),
+
+    removeSnackbar: (id) => set(state => {
+      state.snackbars = state.snackbars.filter(s => s.id !== id);
+    }),
 
     addAsset: (asset) => set(state => { state.assets.push(asset); }),
 

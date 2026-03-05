@@ -61,3 +61,9 @@ export interface Project {
   tracks: Track[];
   assets: AssetMeta[];
 }
+
+export interface SnackbarMessage {
+  id: string;
+  type: 'error' | 'success' | 'info';
+  message: string;
+}

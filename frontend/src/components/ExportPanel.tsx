@@ -4,7 +4,7 @@ import { useEditorStore } from '../store/editorStore';
 const API = 'http://localhost:3001';
 
 export default function ExportPanel() {
-  const { project, setExportPanelOpen, setInPoint, setOutPoint } = useEditorStore();
+  const { project, setExportPanelOpen, setInPoint, setOutPoint, addSnackbar } = useEditorStore();
   const [format, setFormat] = useState('mp4');
   const [resolution, setResolution] = useState('source');
   const [status, setStatus] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
@@ -37,8 +37,13 @@ export default function ExportPanel() {
         }),
       });
 
-      const { jobId, error: err } = await resp.json();
-      if (err) { setStatus('error'); setError(err); return; }
+      const { jobId, error: err } = await resp.json().catch((e) => ({ error: e.message || `HTTP error ${resp.status}` }));
+      if (!resp.ok || err) { 
+        setStatus('error'); 
+        setError(err || `HTTP error ${resp.status}`); 
+        addSnackbar('error', `Export failed: ${err || resp.status}`);
+        return; 
+      }
 
       // Open SSE stream for progress
       const evtSource = new EventSource(`${API}/api/render/progress/${jobId}`);
@@ -49,17 +54,25 @@ export default function ExportPanel() {
           evtSource.close();
           setStatus('done');
           setDownloadUrl(`${API}/api/render/download/${jobId}`);
+          addSnackbar('success', 'Render completed successfully');
         }
         if (data.status === 'error') {
           evtSource.close();
           setStatus('error');
           setError(data.error || 'Render failed');
+          addSnackbar('error', `Render failed: ${data.error}`);
         }
       };
-      evtSource.onerror = () => { evtSource.close(); setStatus('error'); setError('Connection lost'); };
+      evtSource.onerror = () => { 
+        evtSource.close(); 
+        setStatus('error'); 
+        setError('Connection lost'); 
+        addSnackbar('error', 'Render connection lost');
+      };
     } catch (e: any) {
       setStatus('error');
-      setError(e.message);
+      setError(e.message || 'Network error');
+      addSnackbar('error', `Render error: ${e.message || e}`);
     }
   };
 
