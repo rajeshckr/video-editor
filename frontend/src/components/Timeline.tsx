@@ -14,10 +14,13 @@ export default function Timeline() {
   const {
     project, cursorTime, setCursorTime, zoom, setZoom,
     setInPoint, setOutPoint, selectedClipId, setSelectedClip,
-    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack
+    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack, assets, setTextEditorOpen,
+    draggedMediaType
   } = useEditorStore();
 
   const [isCaptioning, setIsCaptioning] = useState<Record<string, boolean>>({});
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [highlightedTrackId, setHighlightedTrackId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<{ type: 'playhead' | 'inpoint' | 'outpoint' | 'clip' | 'clipresize'; clipId?: string; trackId?: string; edge?: 'left' | 'right'; startX: number; startTime: number; startDuration?: number; startSrc?: number } | null>(null);
@@ -28,6 +31,36 @@ export default function Timeline() {
   const xToTime = (x: number) => Math.max(0, x / zoom);
 
   const totalWidth = Math.max(project.duration * zoom + 200, 800);
+
+  // Check if there are assets but no clips
+  const hasAssets = assets.length > 0;
+  const hasClips = project.tracks.some(t => t.clips.length > 0);
+
+  // Calculate visible time range
+  const timelineViewportWidth = Math.max(0, viewportWidth - TRACK_LABEL_W);
+  const visibleSeconds = timelineViewportWidth / zoom;
+  const formatVisibleTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  // Track viewport size
+  useEffect(() => {
+    const updateSize = () => {
+      if (scrollRef.current) {
+        setViewportWidth(scrollRef.current.clientWidth);
+      }
+    };
+
+    updateSize();
+    const resizeObserver = new ResizeObserver(updateSize);
+    if (scrollRef.current) {
+      resizeObserver.observe(scrollRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   // ── Ruler click ────────────────────────────────────────────────────────────
   const onRulerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -105,9 +138,18 @@ export default function Timeline() {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [project.outPoint, project.tracks, setZoom]);
 
+  // ── Check if track can accept media type ──────────────────────────────────
+  const canAcceptMediaType = (mediaType: string, trackType: string): boolean => {
+    if (mediaType === 'video') return trackType === 'video';
+    if (mediaType === 'audio') return trackType === 'audio';
+    if (mediaType === 'image' || mediaType === 'text') return trackType === 'caption';
+    return false;
+  };
+
   // ── Timeline drop ─────────────────────────────────────────────────────────
   const onTrackDrop = (e: React.DragEvent, trackId: string, trackType: string) => {
     e.preventDefault();
+    setHighlightedTrackId(null);
     const raw = e.dataTransfer.getData('application/json');
     if (!raw) return;
     const { asset } = JSON.parse(raw);
@@ -115,7 +157,7 @@ export default function Timeline() {
 
     if (asset.type === 'video' && trackType !== 'video') { addSnackbar('error', 'Video clips must go on Video tracks.'); return; }
     if (asset.type === 'audio' && trackType !== 'audio') { addSnackbar('error', 'Audio clips must go on Audio tracks.'); return; }
-    if ((asset.type === 'image' || asset.type === 'text') && trackType !== 'overlay') { addSnackbar('error', 'Images and Text must go on Overlay tracks.'); return; }
+    if ((asset.type === 'image' || asset.type === 'text') && trackType !== 'caption') { addSnackbar('error', 'Images and Text must go on Text/Image tracks.'); return; }
     const rect = scrollRef.current!.getBoundingClientRect();
     const x = e.clientX - rect.left - TRACK_LABEL_W + scrollRef.current!.scrollLeft;
     const pos = Math.max(0, x / zoom);
@@ -194,24 +236,24 @@ export default function Timeline() {
 
       logger.info(`Processing ${captions.length} captions for insertion`);
 
-      // Ensure we have an overlay track for the captions
-      let overlayTrack = project.tracks.find(t => t.type === 'overlay' && t.name === 'Captions');
-      if (!overlayTrack) {
-        logger.info('Creating new Captions overlay track');
-        addTrack('overlay');
-        const newTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'overlay' && t.name.includes('Overlay')); // Get the newly created one
+      // Ensure we have a caption track for the captions
+      let captionTrack = project.tracks.find(t => t.type === 'caption' && t.name === 'Captions');
+      if (!captionTrack) {
+        logger.info('Creating new Captions track');
+        addTrack('caption');
+        const newTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'caption' && t.name.includes('Text/Image')); // Get the newly created one
         if (newTrack) {
           // Use the store method to safely update track name
           useEditorStore.getState().updateTrack(newTrack.id, { name: 'Captions' });
-          overlayTrack = useEditorStore.getState().project.tracks.find(t => t.id === newTrack.id);
+          captionTrack = useEditorStore.getState().project.tracks.find(t => t.id === newTrack.id);
           logger.info('Captions track created and named');
         } else {
-           overlayTrack = project.tracks.find(t => t.type === 'overlay');
+           captionTrack = project.tracks.find(t => t.type === 'caption');
         }
       }
 
-      if (!overlayTrack) {
-        const errMsg = "Could not find or create an overlay track";
+      if (!captionTrack) {
+        const errMsg = "Could not find or create a caption track";
         logger.error(errMsg, new Error(errMsg));
         throw new Error(errMsg);
       }
@@ -248,7 +290,7 @@ export default function Timeline() {
            animation: 'none'
         };
         
-        addClipToTrack(overlayTrack.id, newClip);
+        addClipToTrack(captionTrack.id, newClip);
       });
 
       logger.action('Auto caption', 'SUCCESS', { clipName: clip.originalName, captionCount: captions.length });
@@ -263,7 +305,40 @@ export default function Timeline() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1117] overflow-hidden">
+    <div className="flex flex-col h-full bg-[#0d1117] overflow-hidden relative">
+
+      {/* Empty state hint - centered over timeline view */}
+      {!hasClips && (
+        <div className="absolute top-32 right-0 left-0 flex justify-center pointer-events-none z-30" style={{ paddingLeft: TRACK_LABEL_W }}>
+          <div className="text-center px-6 py-4 bg-[#0d1117] rounded-lg border border-[#30363d] shadow-lg">
+            <div className="mb-2">
+              <svg className="w-10 h-10 text-[#6e7681] mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+              </svg>
+            </div>
+            <div className="text-sm text-[#c9d1d9] font-medium mb-3">
+              {hasAssets 
+                ? "Drag and drop media to the appropriate track below"
+                : "Upload media first, then drag and drop to timeline"}
+            </div>
+            <div className="flex gap-6 justify-center text-xs">
+              <div className="flex items-center gap-2 text-[#7c3aed]">
+                <div className="w-3 h-3 rounded-sm" style={{ background: '#3b1f7a', border: '1px solid #7c3aed' }}></div>
+                <span>Video</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#0891b2]">
+                <div className="w-3 h-3 rounded-sm" style={{ background: '#0c4a6e', border: '1px solid #0891b2' }}></div>
+                <span>Audio</span>
+              </div>
+              <div className="flex items-center gap-2 text-[#ea580c]">
+                <div className="w-3 h-3 rounded-sm" style={{ background: '#7c2d12', border: '1px solid #ea580c' }}></div>
+                <span>Text/Caption</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Zoom controls */}
       {/* eslint-disable-next-line tailwindcss/classnames-order */}
       <div className="flex items-center gap-2 px-3 py-1 border-b border-[#30363d] shrink-0">
@@ -272,7 +347,9 @@ export default function Timeline() {
         <input type="range" min={2} max={300} value={zoom} onChange={e => setZoom(Number(e.target.value))}
           className="w-24 h-1 accent-blue-500" />
         <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 1.25)}>+</button>
-        <span className="text-[10px] text-[#8b949e] w-10">{Math.round(zoom)}px/s</span>
+        <span className="text-[10px] text-[#8b949e] w-14 font-mono" title="Visible time range">
+          {formatVisibleTime(visibleSeconds)}
+        </span>
         <button className="btn btn-ghost px-1.5 py-0.5 text-[11px] font-mono" onClick={handleZoomToFit} title="Zoom to fit (all clips + out point)">
           {'<->'}
         </button>
@@ -280,13 +357,36 @@ export default function Timeline() {
 
       {/* Scrollable area */}
       <div ref={scrollRef} className="flex-1 overflow-auto relative" onWheel={onWheel}>
-        <div style={{ width: TRACK_LABEL_W + totalWidth, position: 'relative', minHeight: '100%' }}>
-
+        <div style={{ width: TRACK_LABEL_W + totalWidth, position: 'relative', minHeight: '100%' }} onDragLeave={() => { setHighlightedTrackId(null); }}>
+        
           {/* Sticky label column */}
           <div style={{ position: 'sticky', left: 0, zIndex: 20, width: TRACK_LABEL_W, float: 'left', backgroundColor: '#161b22' }}>
             {/* Ruler corner */}
-            <div style={{ height: RULER_H, borderBottom: '1px solid #30363d' }} className="flex items-center px-2">
-              <span className="text-[10px] text-[#8b949e]">Tracks</span>
+            <div style={{ height: RULER_H, borderBottom: '1px solid #30363d' }} className="flex items-center justify-between px-2 gap-1">
+              <span className="text-[10px] text-[#8b949e] font-semibold flex-1">Tracks</span>
+              <div className="flex gap-0.5">
+                <button 
+                  className="btn btn-ghost p-0.5 text-[#8b949e] hover:text-[#e6edf3]" 
+                  onClick={() => addTrack('video')} 
+                  title="Add Video Track"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </button>
+                <button 
+                  className="btn btn-ghost p-0.5 text-[#8b949e] hover:text-[#e6edf3]" 
+                  onClick={() => addTrack('audio')} 
+                  title="Add Audio Track"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                </button>
+                <button 
+                  className="btn btn-ghost p-0.5 text-[#8b949e] hover:text-[#e6edf3]" 
+                  onClick={() => setTextEditorOpen(true)} 
+                  title="Add Text/Image Track"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </button>
+              </div>
             </div>
             {/* Track labels */}
             {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => (
@@ -376,12 +476,38 @@ export default function Timeline() {
             </svg>
 
             {/* Track rows */}
-            {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => (
+            {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => {
+              const baseBg = draggedMediaType && canAcceptMediaType(draggedMediaType, track.type) ? '#162b48' : '#0d1117';
+              const bg = highlightedTrackId === track.id ? '#1c4a8f' : baseBg;
+              
+              return (
               <div
                 key={track.id}
-                style={{ height: TRACK_H, width: totalWidth, position: 'relative', borderBottom: '1px solid #1c2128', background: '#0d1117' }}
+                style={{ height: TRACK_H, width: totalWidth, position: 'relative', borderBottom: '1px solid #1c2128', background: bg, transition: 'background 0.15s' }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                }}
+                onDragLeave={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  if (
+                    e.clientY <= rect.top ||
+                    e.clientY >= rect.bottom ||
+                    e.clientX <= rect.left ||
+                    e.clientX >= rect.right
+                  ) {
+                    setHighlightedTrackId(prev => (prev === track.id ? null : prev));
+                  }
+                }}
                 onDrop={e => onTrackDrop(e, track.id, track.type)}
-                onDragOver={e => e.preventDefault()}
+                onDragOver={e => {
+                  e.preventDefault();
+                  const types = Array.from(e.dataTransfer.types);
+                  const mediaType = types.find(t => t.startsWith('application/x-media-'))?.replace('application/x-media-', '');
+                  
+                  if (mediaType && canAcceptMediaType(mediaType, track.type)) {
+                    setHighlightedTrackId(track.id);
+                  }
+                }}
               >
                 {/* Playhead line */}
                 <div style={{ position: 'absolute', left: timeToX(cursorTime), top: 0, bottom: 0, width: 1, background: '#ef4444', zIndex: 5, pointerEvents: 'none' }} />
@@ -447,7 +573,8 @@ export default function Timeline() {
                   );
                 })}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

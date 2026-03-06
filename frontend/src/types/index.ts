@@ -29,7 +29,7 @@ export interface Clip {
 
 export interface Track {
   id: string;
-  type: 'video' | 'audio' | 'overlay';
+  type: 'video' | 'audio' | 'caption';
   trackNumber: number;
   name: string;
   muted: boolean;
@@ -54,6 +54,7 @@ export interface AssetMeta {
 export interface Project {
   projectName: string;
   resolution: { width: number; height: number };
+  orientation?: 'portrait' | 'landscape';
   fps: number;
   duration: number;
   inPoint: number;

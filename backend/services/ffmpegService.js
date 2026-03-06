@@ -128,9 +128,9 @@ async function render({ project, inPoint, outPoint, outputPath, outputFormat, on
       muted: track.muted
     });
     
-    // Skip invisible video/overlay tracks entirely (don't render at all)
-    if (track.visible === false && (track.type === 'video' || track.type === 'overlay')) {
-      logger.debug('Skipping invisible video/overlay track', { trackName: track.name, trackType: track.type });
+    // Skip invisible video/caption tracks entirely (don't render at all)
+    if (track.visible === false && (track.type === 'video' || track.type === 'caption')) {
+      logger.debug('Skipping invisible video/caption track', { trackName: track.name, trackType: track.type });
       return;
     }
     

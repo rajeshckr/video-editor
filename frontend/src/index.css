@@ -127,4 +127,4 @@ body {
 /* Track colors */
 .track-video { border-left: 3px solid var(--clip-video); }
 .track-audio { border-left: 3px solid var(--clip-audio); }
-.track-overlay { border-left: 3px solid var(--clip-image); }
+.track-caption { border-left: 3px solid var(--clip-image); }

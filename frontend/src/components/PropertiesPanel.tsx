@@ -22,6 +22,12 @@ export default function PropertiesPanel() {
 
   const update = (field: string, value: any) => updateClip(selectedTrackId, selectedClip!.id, { [field]: value });
 
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = (seconds % 60).toFixed(2);
+    return `${m}:${String(Math.floor(parseFloat(s))).padStart(2, '0')}.${String(Math.round((parseFloat(s) % 1) * 100)).padStart(2, '0')}`;
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#161b22] overflow-y-auto">
       <div className="px-3 py-2 border-b border-[#30363d] flex items-center justify-between">
@@ -39,29 +45,27 @@ export default function PropertiesPanel() {
 
         <hr className="border-[#30363d]" />
 
-        {/* Timing */}
+        {/* Timing - Readonly Summary */}
         <div className="space-y-2">
           <div className="text-[#8b949e] font-medium">Timing</div>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[#8b949e]">Position (s)</span>
-            <input className="input text-xs" type="number" step="0.01" value={selectedClip.timelinePosition.toFixed(2)}
-              onChange={e => update('timelinePosition', parseFloat(e.target.value))} />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[#8b949e]">Duration (s)</span>
-            <input className="input text-xs" type="number" step="0.01" min="0.1" value={selectedClip.timelineDuration.toFixed(2)}
-              onChange={e => update('timelineDuration', parseFloat(e.target.value))} />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[#8b949e]">Src In (s)</span>
-            <input className="input text-xs" type="number" step="0.01" value={selectedClip.srcStart.toFixed(2)}
-              onChange={e => update('srcStart', parseFloat(e.target.value))} />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[#8b949e]">Src Out (s)</span>
-            <input className="input text-xs" type="number" step="0.01" value={selectedClip.srcEnd.toFixed(2)}
-              onChange={e => update('srcEnd', parseFloat(e.target.value))} />
-          </label>
+          <div className="bg-[#0d1117] rounded border border-[#30363d] p-2 space-y-1.5 font-mono text-[10px]">
+            <div className="flex justify-between">
+              <span className="text-[#8b949e]">Position:</span>
+              <span className="text-[#e6edf3]">{formatTime(selectedClip.timelinePosition)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8b949e]">Duration:</span>
+              <span className="text-[#e6edf3]">{formatTime(selectedClip.timelineDuration)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8b949e]">Src In:</span>
+              <span className="text-[#e6edf3]">{formatTime(selectedClip.srcStart)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8b949e]">Src Out:</span>
+              <span className="text-[#e6edf3]">{formatTime(selectedClip.srcEnd)}</span>
+            </div>
+          </div>
         </div>
 
         <hr className="border-[#30363d]" />
@@ -89,9 +93,14 @@ export default function PropertiesPanel() {
             </label>
           </div>
 
-          {selectedClip.type === 'image' && (
+          {(selectedClip.type === 'image' || selectedClip.type === 'video' || selectedClip.type === 'text') && (
             <div className="space-y-2">
               <div className="text-[#8b949e] font-medium">Transform</div>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[#8b949e]">Zoom: {(selectedClip.transform?.scale ?? 1).toFixed(1)}x</span>
+                <input type="range" min={0.1} max={10} step={0.1} value={selectedClip.transform?.scale ?? 1}
+                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,y:0,rotation:0}), scale: parseFloat(e.target.value) })} className="accent-blue-500" />
+              </label>
               <label className="flex flex-col gap-0.5">
                 <span className="text-[#8b949e]">X Position: {Math.round(selectedClip.transform?.x ?? 0)}</span>
                 <input type="range" min={-project.resolution.width} max={project.resolution.width} step={1} value={selectedClip.transform?.x ?? 0}
@@ -101,11 +110,6 @@ export default function PropertiesPanel() {
                 <span className="text-[#8b949e]">Y Position: {Math.round(selectedClip.transform?.y ?? 0)}</span>
                 <input type="range" min={-project.resolution.height} max={project.resolution.height} step={1} value={selectedClip.transform?.y ?? 0}
                   onChange={e => update('transform', { ...(selectedClip.transform || {x:0,scale:1,rotation:0}), y: parseFloat(e.target.value) })} className="accent-blue-500" />
-              </label>
-              <label className="flex flex-col gap-0.5">
-                <span className="text-[#8b949e]">Scale: {Math.round((selectedClip.transform?.scale ?? 1)*100)}%</span>
-                <input type="range" min={0.1} max={5} step={0.05} value={selectedClip.transform?.scale ?? 1}
-                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,y:0,rotation:0}), scale: parseFloat(e.target.value) })} className="accent-blue-500" />
               </label>
             </div>
           )}

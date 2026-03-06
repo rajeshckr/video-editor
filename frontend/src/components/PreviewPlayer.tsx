@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import type { Clip } from '../types';
 
@@ -6,20 +6,37 @@ const API = 'http://localhost:3001';
 
 export default function PreviewPlayer() {
   const {
-    project, cursorTime, setCursorTime, playbackState, setPlaybackState,
+    project, cursorTime, setCursorTime, playbackState, setPlaybackState, setOrientation,
   } = useEditorStore();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
   const imageCache = useRef<Record<string, HTMLImageElement>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const startWallRef = useRef<number>(0);
   const startCursorRef = useRef<number>(0);
+  const [containerHeight, setContainerHeight] = useState(0);
 
   const W = project.resolution.width;
   const H = project.resolution.height;
   const aspect = W / H;
+
+  // Track container size for responsive canvas
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height);
+      }
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   // Find active video clip at a given time
   const getActiveVideoClip = (t: number, proj = project): Clip | null => {
@@ -262,11 +279,59 @@ export default function PreviewPlayer() {
     setCursorTime(Math.max(0, cursorTime + dir * (1 / (project.fps || 30))));
   };
 
+  // Calculate maximum canvas size based on available space
+  const maxCanvasHeight = containerHeight > 0 ? containerHeight - 150 : 500; // Reserve space for controls
+  const maxCanvasWidth = 800;
+  
+  // Determine canvas display size while maintaining aspect ratio
+  let canvasDisplayHeight = maxCanvasHeight;
+  let canvasDisplayWidth = canvasDisplayHeight * aspect;
+  
+  if (canvasDisplayWidth > maxCanvasWidth) {
+    canvasDisplayWidth = maxCanvasWidth;
+    canvasDisplayHeight = canvasDisplayWidth / aspect;
+  }
+
   return (
-    <div className="flex flex-col items-center w-full max-h-full gap-2">
+    <div ref={containerRef} className="flex flex-col items-center w-full h-full gap-2 overflow-y-auto p-2">
+      {/* Orientation toggle buttons */}
+      <div className="flex items-center gap-2 bg-[#161b22] p-2 rounded-lg border border-[#30363d] shrink-0">
+        <span className="text-xs text-[#8b949e] mr-1">Orientation:</span>
+        <button
+          className={`p-1.5 rounded transition-colors ${
+            project.orientation === 'landscape'
+              ? 'bg-blue-600 text-white'
+              : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
+          }`}
+          onClick={() => setOrientation('landscape')}
+          title="Landscape (16:9)"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="2" y="6" width="20" height="12" rx="2" strokeWidth="2"/>
+          </svg>
+        </button>
+        <button
+          className={`p-1.5 rounded transition-colors ${
+            project.orientation === 'portrait'
+              ? 'bg-blue-600 text-white'
+              : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
+          }`}
+          onClick={() => setOrientation('portrait')}
+          title="Portrait (9:16)"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="2" width="12" height="20" rx="2" strokeWidth="2"/>
+          </svg>
+        </button>
+      </div>
+      
       {/* Video area */}
-      <div className="relative bg-black rounded-lg overflow-hidden flex-shrink-0"
-        style={{ width: '100%', maxWidth: '640px', aspectRatio: `${aspect}` }}>
+      <div className="relative bg-black rounded-lg overflow-hidden shrink-0"
+        style={{ 
+          width: `${canvasDisplayWidth}px`, 
+          height: `${canvasDisplayHeight}px`,
+          maxWidth: '100%'
+        }}>
         <video
           ref={videoRef}
           className="absolute inset-0 w-full h-full object-contain opacity-0 pointer-events-none"
@@ -293,7 +358,7 @@ export default function PreviewPlayer() {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <button className="btn btn-ghost p-1.5" onClick={() => frameStep(-1)} title="Step back 1 frame">
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm.5 6L20 18V6z"/></svg>
         </button>

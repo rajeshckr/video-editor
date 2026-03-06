@@ -18,6 +18,8 @@ interface EditorState {
   history: Project[];
   historyIndex: number;
   snackbars: SnackbarMessage[];
+  outPointManuallySet: boolean; // Track if user has manually adjusted outPoint
+  draggedMediaType: string | null;
 
   // Actions
   addSnackbar: (type: SnackbarMessage['type'], message: string) => void;
@@ -43,15 +45,18 @@ interface EditorState {
   toggleTrackVisible: (trackId: string) => void;
   setTextEditorOpen: (open: boolean) => void;
   setExportPanelOpen: (open: boolean) => void;
+  setOrientation: (orientation: 'portrait' | 'landscape') => void;
   undo: () => void;
   redo: () => void;
   loadProject: (project: Project, assets: AssetMeta[]) => void;
   updateProjectName: (name: string) => void;
+  setDraggedMediaType: (type: string | null) => void;
 }
 
 const DEFAULT_PROJECT: Project = {
   projectName: 'Untitled Project',
   resolution: { width: 1920, height: 1080 },
+  orientation: 'landscape',
   fps: 30,
   duration: 120,
   inPoint: 0,
@@ -59,7 +64,7 @@ const DEFAULT_PROJECT: Project = {
   tracks: [
     { id: uuidv4(), type: 'video', trackNumber: 0, name: 'Video 1', muted: false, visible: true, clips: [] },
     { id: uuidv4(), type: 'audio', trackNumber: 1, name: 'Audio 1', muted: false, visible: true, clips: [] },
-    { id: uuidv4(), type: 'overlay', trackNumber: 2, name: 'Overlay 1', muted: false, visible: true, clips: [] },
+    { id: uuidv4(), type: 'caption', trackNumber: 2, name: 'Text/Image 1', muted: false, visible: true, clips: [] },
   ],
   assets: [],
 };
@@ -77,6 +82,8 @@ export const useEditorStore = create<EditorState>()(
     history: [],
     historyIndex: -1,
     snackbars: [],
+    outPointManuallySet: false,
+    draggedMediaType: null,
 
     addSnackbar: (type, message) => set(state => {
       state.snackbars.push({ id: uuidv4(), type, message });
@@ -144,6 +151,30 @@ export const useEditorStore = create<EditorState>()(
         logger.error('Add clip to track failed:', new Error(`Track ${trackId} not found`));
         return;
       }
+      
+      // Auto-detect orientation from the first VIDEO clip added
+      const hasExistingVideoClips = state.project.tracks.some(t => 
+        t.clips.some(c => c.type === 'video')
+      );
+      
+      if (!hasExistingVideoClips && clipData.type === 'video' && clipData.width && clipData.height) {
+        const clipOrientation = clipData.width > clipData.height ? 'landscape' : 'portrait';
+        state.project.orientation = clipOrientation;
+        
+        // Update resolution to match orientation
+        if (clipOrientation === 'portrait') {
+          state.project.resolution = { width: 1080, height: 1920 };
+        } else {
+          state.project.resolution = { width: 1920, height: 1080 };
+        }
+        
+        logger.action(`Auto-detected orientation from first video clip`, 'SUCCESS', { 
+          orientation: clipOrientation,
+          clipDimensions: { width: clipData.width, height: clipData.height },
+          newResolution: state.project.resolution
+        });
+      }
+      
       const newClip: Clip = {
         id: uuidv4(),
         trackId,
@@ -160,7 +191,12 @@ export const useEditorStore = create<EditorState>()(
       const end = newClip.timelinePosition + newClip.timelineDuration;
       if (end > state.project.duration) {
         state.project.duration = end + 10;
-        if (state.project.outPoint < end) state.project.outPoint = end;
+      }
+      // Auto-update outPoint to end of last clip if not manually set
+      if (!get().outPointManuallySet) {
+        const allClips = state.project.tracks.flatMap(t => t.clips);
+        const lastClipEnd = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+        state.project.outPoint = lastClipEnd;
       }
     }),
 
@@ -171,6 +207,13 @@ export const useEditorStore = create<EditorState>()(
       if (clip) {
         logger.store('EditorStore', 'updateClip', { clipId, updates: Object.keys(updates) });
         Object.assign(clip, updates);
+        
+        // Auto-update outPoint if not manually set
+        if (!get().outPointManuallySet) {
+          const allClips = state.project.tracks.flatMap(t => t.clips);
+          const lastClipEnd = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+          state.project.outPoint = lastClipEnd;
+        }
       }
     }),
 
@@ -180,6 +223,13 @@ export const useEditorStore = create<EditorState>()(
         const clip = track.clips.find(c => c.id === clipId);
         logger.action(`Remove clip`, 'SUCCESS', { clipName: clip?.originalName, trackName: track.name });
         track.clips = track.clips.filter(c => c.id !== clipId);
+        
+        // Auto-update outPoint if not manually set
+        if (!get().outPointManuallySet) {
+          const allClips = state.project.tracks.flatMap(t => t.clips);
+          const lastClipEnd = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+          state.project.outPoint = lastClipEnd || 0;
+        }
       }
     }),
 
@@ -199,6 +249,13 @@ export const useEditorStore = create<EditorState>()(
       } else {
         fromTrack.clips.push(clip);
         logger.store('EditorStore', 'reposition clip', { clipName: clip.originalName, newPosition });
+      }
+      
+      // Auto-update outPoint if not manually set
+      if (!get().outPointManuallySet) {
+        const allClips = state.project.tracks.flatMap(t => t.clips);
+        const lastClipEnd = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+        state.project.outPoint = lastClipEnd;
       }
     }),
 
@@ -232,6 +289,13 @@ export const useEditorStore = create<EditorState>()(
       };
       track.clips.push(newClip);
       logger.action(`Split clip`, 'SUCCESS', { clipName: clip.originalName, at: splitTime, firstDuration, secondDuration });
+      
+      // Auto-update outPoint if not manually set
+      if (!get().outPointManuallySet) {
+        const allClips = state.project.tracks.flatMap(t => t.clips);
+        const lastClipEnd = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+        state.project.outPoint = lastClipEnd;
+      }
     }),
 
     extractAudioFromVideo: (trackId, clipId) => set(state => {
@@ -267,13 +331,24 @@ export const useEditorStore = create<EditorState>()(
         volume: 1, // original volume
       };
       aTrack.clips.push(aClip);
+      
+      // Auto-update outPoint if not manually set
+      if (!get().outPointManuallySet) {
+        const allClips = state.project.tracks.flatMap(t => t.clips);
+        const lastClipEnd = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+        state.project.outPoint = lastClipEnd;
+      }
     }),
 
     setCursorTime: (time) => set(state => { state.cursorTime = Math.max(0, time); }),
     setPlaybackState: (s) => set(state => { state.playbackState = s; }),
     setSelectedClip: (id) => set(state => { state.selectedClipId = id; }),
     setInPoint: (t) => set(state => { state.project.inPoint = Math.max(0, t); }),
-    setOutPoint: (t) => set(state => { state.project.outPoint = Math.min(state.project.duration, t); }),
+    setOutPoint: (t) => set(state => { 
+      state.project.outPoint = Math.min(state.project.duration, t);
+      state.outPointManuallySet = true; // Mark as manually set
+      logger.action('Set outPoint manually', 'SUCCESS', { outPoint: t });
+    }),
     setZoom: (zoom) => set(state => { state.zoom = Math.max(2, Math.min(300, zoom)); }),
 
     toggleTrackMute: (trackId) => set(state => {
@@ -294,6 +369,17 @@ export const useEditorStore = create<EditorState>()(
 
     setTextEditorOpen: (open) => set(state => { state.textEditorOpen = open; }),
     setExportPanelOpen: (open) => set(state => { state.exportPanelOpen = open; }),
+
+    setOrientation: (orientation) => set(state => {
+      state.project.orientation = orientation;
+      // Update resolution to match orientation
+      if (orientation === 'portrait') {
+        state.project.resolution = { width: 1080, height: 1920 };
+      } else {
+        state.project.resolution = { width: 1920, height: 1080 };
+      }
+      logger.action(`Set orientation`, 'SUCCESS', { orientation, resolution: state.project.resolution });
+    }),
 
     undo: () => {
       const { history, historyIndex } = get();
@@ -327,11 +413,14 @@ export const useEditorStore = create<EditorState>()(
       state.assets = assets;
       state.cursorTime = 0;
       state.selectedClipId = null;
+      state.outPointManuallySet = false; // Reset flag on project load
     }),
 
     updateProjectName: (name) => set(state => {
       logger.action('Update project name', 'SUCCESS', { newName: name });
       state.project.projectName = name;
     }),
+
+    setDraggedMediaType: (type) => set(state => { state.draggedMediaType = type; }),
   }))
 );

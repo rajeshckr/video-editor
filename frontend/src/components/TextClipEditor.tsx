@@ -23,7 +23,7 @@ export default function TextClipEditor() {
   const [duration, setDuration] = useState(selectedClip?.timelineDuration ?? 5);
   const [animation, setAnimation] = useState(selectedClip?.animation || 'none');
 
-  const overlayTrack = project.tracks.find(t => t.type === 'overlay');
+  const captionTrack = project.tracks.find(t => t.type === 'caption');
 
   const handleApply = () => {
     if (selectedClip && selectedClipId) {
@@ -36,14 +36,14 @@ export default function TextClipEditor() {
         }
       }
     } else {
-      if (!overlayTrack) { alert('Add an Overlay track first'); return; }
+      if (!captionTrack) { alert('Add a Text/Image track first'); return; }
       const clip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
         type: 'text', filePath: '', originalName: `Text: ${text}`,
         srcStart: 0, srcEnd: duration, timelinePosition: startTime, timelineDuration: duration,
         volume: 1, opacity: 1, transform: { x: 0, y: 0, scale: 1, rotation: 0 },
         effects: [], text, font, fontSize, color, x, y, animation,
       };
-      addClipToTrack(overlayTrack.id, clip);
+      addClipToTrack(captionTrack.id, clip);
     }
     setTextEditorOpen(false);
   };
