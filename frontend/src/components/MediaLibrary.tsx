@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import type { AssetMeta, Clip } from '../types';
+import { api } from '../utils/api';
 
 
 const API = 'http://localhost:3001';
@@ -17,7 +18,7 @@ export default function MediaLibrary() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch(`${API}/api/upload`, { method: 'POST', body: formData });
+      const res = await api.upload('/api/upload', formData);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         addAsset(data.asset as AssetMeta);
@@ -96,7 +97,7 @@ export default function MediaLibrary() {
             className="flex items-center gap-2 p-2 rounded-md hover:bg-[#1c2128] cursor-grab active:cursor-grabbing border border-transparent hover:border-[#30363d] transition-colors group"
           >
             {/* Thumbnail or icon */}
-            <div className="w-12 h-8 flex-shrink-0 rounded overflow-hidden bg-[#0d1117] flex items-center justify-center">
+            <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-[#0d1117] flex items-center justify-center">
               {asset.thumbnail
                 ? <img src={`${API}${asset.thumbnail}`} alt="" className="w-full h-full object-cover" />
                 : <span className="text-base">{iconForType(asset.type)}</span>

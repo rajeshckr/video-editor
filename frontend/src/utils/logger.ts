@@ -23,40 +23,28 @@ const LOG_COLORS: Record<LogLevel, string> = {
 
 interface LoggerConfig {
   enableConsole: boolean;
-  enableLocalStorage: boolean;
-  maxLocalStorageLogs: number;
   moduleName: string;
 }
 
 class Logger {
   private moduleName: string;
   private enableConsole: boolean;
-  private enableLocalStorage: boolean;
-  private maxLocalStorageLogs: number;
   private timers: Map<string, number> = new Map();
 
   constructor(config: Partial<LoggerConfig> = {}) {
     this.moduleName = config.moduleName || 'App';
     this.enableConsole = config.enableConsole !== false;
-    this.enableLocalStorage = config.enableLocalStorage !== false;  // Default to TRUE
-    this.maxLocalStorageLogs = config.maxLocalStorageLogs || 500;
   }
 
   static getInstance(moduleName: string = 'App'): Logger {
     return new Logger({ moduleName });
   }
 
-  private formatTimestamp(): string {
-    const now = new Date();
-    return now.toISOString().replace('T', ' ').slice(0, -5);
-  }
-
   private formatMessage(level: LogLevel, message: string, data?: unknown): string {
-    const timestamp = this.formatTimestamp();
     const module = `[${this.moduleName}]`;
     const levelTag = `[${level}]`;
 
-    let formatted = `${timestamp} ${levelTag} ${module} ${message}`;
+    let formatted = `${levelTag} ${module} ${message}`;
 
     if (data) {
       if (typeof data === 'object') {
@@ -73,98 +61,42 @@ class Logger {
     if (!this.enableConsole) return;
 
     const color = LOG_COLORS[level];
-    const bgColor = level === 'ERROR' ? '#1e293b' : level === 'DEBUG' ? '#0f172a' : '#f8f8f8';
-    const style = `color: ${color}; font-weight: bold; background-color: ${bgColor}; padding: 2px 6px; border-radius: 3px;`;
-
-    // Full formatted message with groups for better readability
-    const timestamp = this.formatTimestamp();
-    const headerStyle = `${style} margin-right: 8px;`;
     
     const logParts = formatted.split('\n');
     const messageWithoutData = logParts[0];
     const dataLines = logParts.slice(1);
 
+    // Simple log with color styling but no font information text
     console.log(
-      `%c${timestamp}%c${level.padEnd(6)}%c${this.moduleName}`,
-      'color: #888888; font-size: 11px;',
-      headerStyle,
-      'color: #6366f1; font-weight: bold;'
+      `%c${messageWithoutData}`,
+      `color: ${color}; font-weight: bold;`
     );
     
-    console.log('%c' + messageWithoutData, `color: ${color}; font-size: 13px; font-weight: 500;`);
-    
+    // Log expandable data if present
     if (dataLines.length > 0) {
       const dataStr = dataLines.join('\n');
       try {
-        // Try to parse and pretty-print JSON
         const jsonData = JSON.parse(dataStr);
-        console.table(jsonData);
+        console.log(jsonData);
       } catch {
-        // If not JSON, just log as grouped info
-        console.log('%cData:', 'color: #666; font-weight: bold;', dataStr);
+        console.log(dataStr);
       }
-    }
-  }
-
-  private saveToLocalStorage(formatted: string): void {
-    if (!this.enableLocalStorage) return;
-
-    try {
-      const logsKey = '__app_logs__';
-      let logs = [];
-
-      try {
-        const existing = localStorage.getItem(logsKey);
-        if (existing) {
-          logs = JSON.parse(existing);
-        }
-      } catch {
-        logs = [];
-      }
-
-      logs.push({
-        timestamp: new Date().toISOString(),
-        message: formatted
-      });
-
-      // Remove logs older than 1 hour
-      const oneHourAgo = Date.now() - (60 * 60 * 1000);
-      logs = logs.filter((log: { timestamp: string; message: string }) => {
-        try {
-          const logTime = new Date(log.timestamp).getTime();
-          return logTime > oneHourAgo;
-        } catch {
-          return true; // Keep logs with invalid timestamps just in case
-        }
-      });
-
-      // Keep only the last N logs
-      if (logs.length > this.maxLocalStorageLogs) {
-        logs = logs.slice(-this.maxLocalStorageLogs);
-      }
-
-      localStorage.setItem(logsKey, JSON.stringify(logs));
-    } catch {
-      // Silent fail - localStorage might be full
     }
   }
 
   debug(message: string, data?: unknown): void {
     const formatted = this.formatMessage('DEBUG', message, data);
     this.logToConsole('DEBUG', formatted);
-    this.saveToLocalStorage(formatted);
   }
 
   info(message: string, data?: unknown): void {
     const formatted = this.formatMessage('INFO', message, data);
     this.logToConsole('INFO', formatted);
-    this.saveToLocalStorage(formatted);
   }
 
   warn(message: string, data?: unknown): void {
     const formatted = this.formatMessage('WARN', message, data);
     this.logToConsole('WARN', formatted);
-    this.saveToLocalStorage(formatted);
   }
 
   error(message: string, errorOrData?: Error | unknown): void {
@@ -181,7 +113,6 @@ class Logger {
 
     const formatted = this.formatMessage('ERROR', message, data);
     this.logToConsole('ERROR', formatted);
-    this.saveToLocalStorage(formatted);
   }
 
   /**
@@ -244,109 +175,6 @@ class Logger {
     return duration;
   }
 
-  /**
-   * Get all logs from localStorage (automatically excludes logs older than 1 hour)
-   */
-  getLogs(): Array<{ timestamp: string; message: string }> {
-    try {
-      const logsJson = localStorage.getItem('__app_logs__');
-      if (!logsJson) return [];
-      
-      const parsedLogs: Array<{ timestamp: string; message: string }> = JSON.parse(logsJson);
-      
-      // Remove logs older than 1 hour
-      const oneHourAgo = Date.now() - (60 * 60 * 1000);
-      const recentLogs = parsedLogs.filter((log: { timestamp: string; message: string }) => {
-        try {
-          const logTime = new Date(log.timestamp).getTime();
-          return logTime > oneHourAgo;
-        } catch {
-          return true;
-        }
-      });
-      
-      return recentLogs;
-    } catch {
-      return [];
-    }
-  }
-
-  /**
-   * Clear all localStorage logs (manually cleared, otherwise auto-cleaned after 1 hour)
-   */
-  clearLogs(): void {
-    try {
-      localStorage.removeItem('__app_logs__');
-      this.info('Logs cleared');
-    } catch {
-      this.warn('Failed to clear logs');
-    }
-  }
-
-  /**
-   * Print all stored logs to console (only shows last 1 hour of logs)
-   */
-  printAllLogs(): void {
-    const logs = this.getLogs();
-    console.group('%c📋 ALL STORED LOGS (Last 1 Hour)', 'color: #06b6d4; font-size: 16px; font-weight: bold;');
-    console.log('%cℹ️  Logs older than 1 hour are automatically removed from storage', 'color: #888; font-size: 11px; font-style: italic;');
-    if (logs.length === 0) {
-      console.log('%cNo logs found', 'color: #999;');
-    } else {
-      logs.forEach((log, i) => {
-        console.log(`%c[${i + 1}/${logs.length}] ${log.timestamp}`, 'color: #888; font-size: 11px;');
-        console.log(log.message);
-      });
-    }
-    console.groupEnd();
-    console.log(`%c✅ Total logs: ${logs.length}`, 'color: #22c55e; font-weight: bold;');
-  }
-
-  /**
-   * Export logs as JSON
-   */
-  exportLogs(): void {
-    const logs = this.getLogs();
-    const content = JSON.stringify(logs, null, 2);
-    const blob = new Blob([content], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `logs-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 }
-
-// Global debug utilities
-export const setupGlobalDebugTools = (): void => {
-  const debugLogger = Logger.getInstance('GlobalDebug');
-  
-  const debugTools: Record<string, unknown> = {
-    // View all stored logs
-    view: () => debugLogger.printAllLogs(),
-    // Export logs
-    export: () => debugLogger.exportLogs(),
-    // Get raw logs
-    get: () => debugLogger.getLogs(),
-    // Clear logs
-    clear: () => debugLogger.clearLogs(),
-    // Create new logger
-    create: (name: string) => Logger.getInstance(name),
-    // Help text
-    help: () => {
-      console.log('%c📊 LOG DEBUG UTILITIES', 'color: #06b6d4; font-size: 14px; font-weight: bold;');
-      console.log('%c__logs.view()%c   - Print all stored logs to console', 'color: #22c55e; font-weight: bold;', 'color: #666;');
-      console.log('%c__logs.export()%c - Download logs as JSON file', 'color: #22c55e; font-weight: bold;', 'color: #666;');
-      console.log('%c__logs.get()%c    - Get all logs as array', 'color: #22c55e; font-weight: bold;', 'color: #666;');
-      console.log('%c__logs.clear()%c  - Clear all stored logs', 'color: #22c55e; font-weight: bold;', 'color: #666;');
-      console.log('%c__logs.create(name)%c - Create new logger instance', 'color: #22c55e; font-weight: bold;', 'color: #666;');
-    }
-  };
-  
-  (window as unknown as Record<string, unknown>).__logs = debugTools;
-  console.log('%c✨ Video Editor Debug Tools Ready', 'color: #06b6d4; font-size: 14px; font-weight: bold;');
-  console.log('%cType: %c__logs.help()%c to see available commands', 'color: #666;', 'color: #22c55e; font-weight: bold;', 'color: #666;');
-};
 
 export default Logger;

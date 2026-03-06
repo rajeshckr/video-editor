@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import Logger from './utils/logger';
 import Toolbar from './components/Toolbar';
 import MediaLibrary from './components/MediaLibrary';
@@ -14,44 +14,13 @@ const logger = Logger.getInstance('App');
 
 export default function App() {
   const {
-    project, exportPanelOpen, textEditorOpen, setPlaybackState, playbackState, addSnackbar
+    exportPanelOpen, textEditorOpen, setPlaybackState, playbackState
   } = useEditorStore();
 
   // Log app initialization
   useEffect(() => {
-    logger.info('🚀 Video Editor Application Loaded', { 
-      timestamp: new Date().toISOString(),
-      message: 'All systems ready. Type __logs.help() in console for debug tools.'
-    });
+    logger.info('🚀 Video Editor Application Loaded');
   }, []);
-
-  // Ref to keep track of the latest project state for the autosave interval
-  const projRef = useRef(project);
-  useEffect(() => {
-    projRef.current = project;
-  }, [project]);
-
-  // Auto-save project every 30 seconds
-  const saveRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    saveRef.current = setInterval(async () => {
-      try {
-        const resp = await fetch('http://localhost:3001/api/project/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(projRef.current),
-        });
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          addSnackbar('error', `Autosave failing: ${data.error || resp.status}`);
-        }
-      } catch (e: any) { 
-        console.error('Autosave failed:', e);
-        // Only show message occasionally to avoid spamming if server is fully down
-      }
-    }, 30000);
-    return () => { if (saveRef.current) clearInterval(saveRef.current); };
-  }, [addSnackbar]); // addSnackbar is a stable function, so it's safe to include
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -75,7 +44,6 @@ export default function App() {
       {/* Middle section: Media Library + Preview + Properties */}
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {/* Media Library */}
-        {/* eslint-disable-next-line tailwindcss/classnames-order */}
         <div className="w-64 shrink-0 border-r border-[#30363d] overflow-auto">
           <MediaLibrary />
         </div>
@@ -88,7 +56,6 @@ export default function App() {
         </div>
 
         {/* Properties Panel */}
-        {/* eslint-disable-next-line tailwindcss/classnames-order */}
         <div className="w-56 shrink-0 border-l border-[#30363d] overflow-auto">
           <PropertiesPanel />
         </div>

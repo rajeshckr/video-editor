@@ -4,6 +4,8 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 const ffmpegService = require('../services/ffmpegService');
+const Logger = require('../utils/logger');
+const logger = Logger.getInstance('Render-API');
 
 const router = express.Router();
 
@@ -46,7 +48,7 @@ router.post('/', async (req, res) => {
   } catch (err) {
     const job = activeJobs.get(jobId);
     if (job) { job.status = 'error'; job.error = err.message; }
-    console.error('[Render Error]', err.message);
+    logger.error('Render failed', { jobId, error: err.message, stack: err.stack });
   }
 });
 

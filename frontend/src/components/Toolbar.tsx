@@ -1,12 +1,10 @@
 import { useEditorStore } from '../store/editorStore';
 
-const API = 'http://localhost:3001';
-
 export default function Toolbar() {
   const {
-    project, updateProjectName, setPlaybackState, playbackState,
+    setPlaybackState, playbackState,
     cursorTime, setCursorTime, setExportPanelOpen, undo, redo,
-    addTrack, splitClip, selectedClipId, project: { tracks }, addSnackbar, setTextEditorOpen
+    addTrack, splitClip, selectedClipId, project: { tracks }, setTextEditorOpen
   } = useEditorStore();
 
   const formatTime = (s: number) => {
@@ -15,36 +13,6 @@ export default function Toolbar() {
     const sec = Math.floor(s % 60);
     const ms = Math.floor((s % 1) * 100);
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(ms).padStart(2,'0')}`;
-  };
-
-  const handleSave = async () => {
-    try {
-      const resp = await fetch(`${API}/api/project/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(project),
-      });
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error ${resp.status}`);
-      }
-      addSnackbar('success', 'Project saved successfully');
-    } catch (e: any) { addSnackbar('error', `Save failed: ${e.message || e}`); }
-  };
-
-  const handleLoad = async () => {
-    try {
-      const res = await fetch(`${API}/api/project/load`);
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error ${res.status}`);
-      }
-      const { project: loaded } = await res.json();
-      if (loaded) {
-        useEditorStore.getState().loadProject(loaded, loaded.assets || []);
-        addSnackbar('success', 'Project loaded successfully');
-      }
-    } catch (e: any) { addSnackbar('error', `Load failed: ${e.message || e}`); }
   };
 
   const handleSplit = () => {
@@ -56,20 +24,12 @@ export default function Toolbar() {
   };
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border-b border-[#30363d] flex-shrink-0" style={{minHeight:'48px'}}>
+    <div className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border-b border-[#30363d] shrink-0" style={{minHeight:'48px'}}>
       {/* Logo */}
-      <div className="flex items-center gap-2 mr-3 flex-shrink-0">
+      <div className="flex items-center gap-2 mr-3 shrink-0">
         <div className="w-7 h-7 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-sm">C</div>
         <span className="text-white font-semibold text-sm hidden sm:block">CutStudio</span>
       </div>
-
-      {/* Project Name */}
-      <input
-        className="input w-40 text-sm"
-        value={project.projectName}
-        onChange={e => updateProjectName(e.target.value)}
-        title="Project Name"
-      />
 
       <div className="w-px h-6 bg-[#30363d] mx-1" />
 
@@ -133,9 +93,7 @@ export default function Toolbar() {
 
       <div className="w-px h-6 bg-[#30363d] mx-1" />
 
-      {/* Project actions */}
-      <button className="btn btn-ghost text-xs" onClick={handleLoad} title="Load Project">Load</button>
-      <button className="btn btn-ghost text-xs" onClick={handleSave} title="Save Project">Save</button>
+      {/* Export */}
       <button className="btn btn-primary text-xs" onClick={() => setExportPanelOpen(true)} title="Export Video">
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
         Export

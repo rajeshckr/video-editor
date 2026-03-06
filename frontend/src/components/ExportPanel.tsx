@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
+import { api } from '../utils/api';
 
 const API = 'http://localhost:3001';
 
@@ -26,15 +27,11 @@ export default function ExportPanel() {
     if (resolution === '720p') { width = 1280; height = 720; }
 
     try {
-      const resp = await fetch(`${API}/api/render`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project: { ...project, resolution: { width, height } },
-          inPoint,
-          outPoint,
-          outputFormat: format,
-        }),
+      const resp = await api.post('/api/render', {
+        project: { ...project, resolution: { width, height } },
+        inPoint,
+        outPoint,
+        outputFormat: format,
       });
 
       const { jobId, error: err } = await resp.json().catch((e) => ({ error: e.message || `HTTP error ${resp.status}` }));
@@ -83,7 +80,7 @@ export default function ExportPanel() {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => setExportPanelOpen(false)}>
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 w-[420px] space-y-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 w-105 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Export Video</h2>
           <button className="btn btn-ghost p-1" onClick={() => setExportPanelOpen(false)}>✕</button>

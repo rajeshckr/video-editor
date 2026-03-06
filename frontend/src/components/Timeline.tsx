@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import Logger from '../utils/logger';
 import type { Clip } from '../types';
+import { api } from '../utils/api';
 
 const logger = Logger.getInstance('Timeline');
 
@@ -88,6 +89,22 @@ export default function Timeline() {
     if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.15 : 0.87)); }
   };
 
+  const handleZoomToFit = useCallback(() => {
+    const clips = project.tracks.flatMap(t => t.clips || []);
+    const maxClipEnd = clips.reduce((max, clip) => Math.max(max, clip.timelinePosition + clip.timelineDuration), 0);
+    const fitEnd = Math.max(project.outPoint || 0, maxClipEnd);
+    const spanSeconds = Math.max(0.1, fitEnd);
+    const viewportWidth = scrollRef.current?.clientWidth || 1000;
+    const timelineViewport = Math.max(120, viewportWidth - TRACK_LABEL_W);
+    // Place farthest end (max clip end or outPoint) at 90% of visible timeline width.
+    const targetEndPx = timelineViewport * 0.9;
+    const fitZoom = targetEndPx / spanSeconds;
+    const clamped = Math.max(2, Math.min(300, fitZoom));
+
+    setZoom(clamped);
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [project.outPoint, project.tracks, setZoom]);
+
   // ── Timeline drop ─────────────────────────────────────────────────────────
   const onTrackDrop = (e: React.DragEvent, trackId: string, trackType: string) => {
     e.preventDefault();
@@ -157,13 +174,7 @@ export default function Timeline() {
 
     try {
       logger.info('Sending caption request to backend', { filePath: clip.filePath });
-      const resp = await fetch(`http://localhost:3001/api/caption`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath: clip.filePath })
-      });
-
-      logger.api('POST', '/api/caption', resp.status, { filePath: clip.filePath });
+      const resp = await api.post('/api/caption', { filePath: clip.filePath });
 
       if (!resp.ok) {
         const err = await resp.json().catch(()=>({}));
@@ -258,10 +269,13 @@ export default function Timeline() {
       <div className="flex items-center gap-2 px-3 py-1 border-b border-[#30363d] shrink-0">
         <span className="text-[10px] text-[#8b949e]">Zoom</span>
         <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 0.8)}>−</button>
-        <input type="range" min={20} max={300} value={zoom} onChange={e => setZoom(Number(e.target.value))}
+        <input type="range" min={2} max={300} value={zoom} onChange={e => setZoom(Number(e.target.value))}
           className="w-24 h-1 accent-blue-500" />
         <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 1.25)}>+</button>
         <span className="text-[10px] text-[#8b949e] w-10">{Math.round(zoom)}px/s</span>
+        <button className="btn btn-ghost px-1.5 py-0.5 text-[11px] font-mono" onClick={handleZoomToFit} title="Zoom to fit (all clips + out point)">
+          {'<->'}
+        </button>
       </div>
 
       {/* Scrollable area */}

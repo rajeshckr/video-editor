@@ -87,7 +87,6 @@ export const useEditorStore = create<EditorState>()(
     }),
 
     addAsset: (asset) => set(state => {
-      logger.store('EditorStore', 'addAsset', { asset: asset.name, id: asset.id });
       state.assets.push(asset);
     }),
 
@@ -275,7 +274,7 @@ export const useEditorStore = create<EditorState>()(
     setSelectedClip: (id) => set(state => { state.selectedClipId = id; }),
     setInPoint: (t) => set(state => { state.project.inPoint = Math.max(0, t); }),
     setOutPoint: (t) => set(state => { state.project.outPoint = Math.min(state.project.duration, t); }),
-    setZoom: (zoom) => set(state => { state.zoom = Math.max(20, Math.min(300, zoom)); }),
+    setZoom: (zoom) => set(state => { state.zoom = Math.max(2, Math.min(300, zoom)); }),
 
     toggleTrackMute: (trackId) => set(state => {
       const t = state.project.tracks.find(t => t.id === trackId);
