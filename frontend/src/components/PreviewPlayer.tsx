@@ -14,29 +14,63 @@ export default function PreviewPlayer() {
   const imageCache = useRef<Record<string, HTMLImageElement>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const orientationRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const startWallRef = useRef<number>(0);
   const startCursorRef = useRef<number>(0);
-  const [containerHeight, setContainerHeight] = useState(0);
+  const [canvasViewport, setCanvasViewport] = useState({ width: 640, height: 360 });
 
   const W = project.resolution.width;
   const H = project.resolution.height;
   const aspect = W / H;
 
-  // Track container size for responsive canvas
+  // Fit preview to available space while preserving project aspect ratio.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerHeight(entry.contentRect.height);
+    const measure = () => {
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
+      const topControlsHeight = orientationRef.current?.offsetHeight ?? 0;
+      const bottomControlsHeight = controlsRef.current?.offsetHeight ?? 0;
+
+      // Container uses p-2 and gap-2, so reserve space for controls + spacing.
+      const reservedVerticalSpace = topControlsHeight + bottomControlsHeight + 32;
+      const availableWidth = Math.max(0, containerWidth - 16);
+      const availableHeight = Math.max(0, containerHeight - reservedVerticalSpace);
+
+      if (availableWidth === 0 || availableHeight === 0) return;
+
+      let nextWidth = availableWidth;
+      let nextHeight = nextWidth / aspect;
+
+      if (nextHeight > availableHeight) {
+        nextHeight = availableHeight;
+        nextWidth = nextHeight * aspect;
       }
+
+      setCanvasViewport({
+        width: Math.floor(nextWidth),
+        height: Math.floor(nextHeight),
+      });
+    };
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries.length) return;
+      measure();
     });
 
     resizeObserver.observe(container);
+    if (orientationRef.current) resizeObserver.observe(orientationRef.current);
+    if (controlsRef.current) resizeObserver.observe(controlsRef.current);
+
+    // Initial sizing on mount and when project orientation/resolution changes.
+    measure();
+
     return () => resizeObserver.disconnect();
-  }, []);
+  }, [aspect]);
 
   // Find active video clip at a given time
   const getActiveVideoClip = (t: number, proj = project): Clip | null => {
@@ -279,23 +313,10 @@ export default function PreviewPlayer() {
     setCursorTime(Math.max(0, cursorTime + dir * (1 / (project.fps || 30))));
   };
 
-  // Calculate maximum canvas size based on available space
-  const maxCanvasHeight = containerHeight > 0 ? containerHeight - 150 : 500; // Reserve space for controls
-  const maxCanvasWidth = 800;
-  
-  // Determine canvas display size while maintaining aspect ratio
-  let canvasDisplayHeight = maxCanvasHeight;
-  let canvasDisplayWidth = canvasDisplayHeight * aspect;
-  
-  if (canvasDisplayWidth > maxCanvasWidth) {
-    canvasDisplayWidth = maxCanvasWidth;
-    canvasDisplayHeight = canvasDisplayWidth / aspect;
-  }
-
   return (
-    <div ref={containerRef} className="flex flex-col items-center w-full h-full gap-2 overflow-y-auto p-2">
+    <div ref={containerRef} className="flex flex-col items-center w-full h-full gap-2 overflow-hidden p-2">
       {/* Orientation toggle buttons */}
-      <div className="flex items-center gap-2 bg-editor-panel p-2 rounded-lg border border-boundary shrink-0">
+      <div ref={orientationRef} className="flex items-center gap-2 bg-editor-panel p-2 rounded-lg border border-boundary shrink-0">
         <span className="text-xs text-editor-muted mr-1">Orientation:</span>
         <button
           className={`p-1.5 rounded transition-colors ${
@@ -330,8 +351,8 @@ export default function PreviewPlayer() {
         style={{ 
           background: 'var(--editor-canvas)',
 
-          width: `${canvasDisplayWidth}px`, 
-          height: `${canvasDisplayHeight}px`,
+          width: `${canvasViewport.width}px`, 
+          height: `${canvasViewport.height}px`,
           maxWidth: '100%'
         }}>
         <video
@@ -360,7 +381,7 @@ export default function PreviewPlayer() {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-2 shrink-0">
+      <div ref={controlsRef} className="flex items-center gap-2 shrink-0">
         <button className="btn btn-ghost p-1.5" onClick={() => frameStep(-1)} title="Step back 1 frame">
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm.5 6L20 18V6z"/></svg>
         </button>
