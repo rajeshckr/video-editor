@@ -50,7 +50,7 @@ export default function TextClipEditor() {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => setTextEditorOpen(false)}>
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 w-96 space-y-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-editor-panel border border-editor-border rounded-xl p-6 w-96 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Text Clip</h2>
           <button className="btn btn-ghost p-1" onClick={() => setTextEditorOpen(false)}>✕</button>
@@ -58,26 +58,26 @@ export default function TextClipEditor() {
 
         {/* Text content */}
         <div>
-          <label className="text-xs text-[#8b949e] mb-1 block">Text</label>
+          <label className="text-xs text-editor-muted mb-1 block">Text</label>
           <textarea className="input resize-none h-16" value={text} onChange={e => setText(e.target.value)} />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           {/* Font */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Font</label>
+            <label className="text-xs text-editor-muted mb-1 block">Font</label>
             <select className="input" value={font} onChange={e => setFont(e.target.value)}>
               {FONTS.map(f => <option key={f}>{f}</option>)}
             </select>
           </div>
           {/* Font Size */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Size</label>
+            <label className="text-xs text-editor-muted mb-1 block">Size</label>
             <input className="input" type="number" value={fontSize} min={8} max={256} onChange={e => setFontSize(Number(e.target.value))} />
           </div>
           {/* Color */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Color</label>
+            <label className="text-xs text-editor-muted mb-1 block">Color</label>
             <div className="flex gap-2 items-center">
               <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" />
               <input className="input flex-1" value={color} onChange={e => setColor(e.target.value)} />
@@ -85,35 +85,35 @@ export default function TextClipEditor() {
           </div>
           {/* Animation */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Animation</label>
+            <label className="text-xs text-editor-muted mb-1 block">Animation</label>
             <select className="input" value={animation} onChange={e => setAnimation(e.target.value)}>
               {ANIMATIONS.map(a => <option key={a}>{a}</option>)}
             </select>
           </div>
           {/* X Position */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">X Position</label>
+            <label className="text-xs text-editor-muted mb-1 block">X Position</label>
             <input className="input" type="number" value={x} onChange={e => setX(Number(e.target.value))} />
           </div>
           {/* Y Position */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Y Position</label>
+            <label className="text-xs text-editor-muted mb-1 block">Y Position</label>
             <input className="input" type="number" value={y} onChange={e => setY(Number(e.target.value))} />
           </div>
           {/* Start time */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Start (s)</label>
+            <label className="text-xs text-editor-muted mb-1 block">Start (s)</label>
             <input className="input" type="number" step="0.1" value={startTime} onChange={e => setStartTime(Number(e.target.value))} />
           </div>
           {/* Duration */}
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Duration (s)</label>
+            <label className="text-xs text-editor-muted mb-1 block">Duration (s)</label>
             <input className="input" type="number" step="0.1" value={duration} min="0.1" onChange={e => setDuration(Number(e.target.value))} />
           </div>
         </div>
 
         {/* Preview */}
-        <div className="bg-black rounded-lg h-20 flex items-center justify-center overflow-hidden border border-[#30363d]">
+        <div className="bg-black rounded-lg h-20 flex items-center justify-center overflow-hidden border border-editor-border">
           <span style={{ fontFamily: font, fontSize: Math.min(fontSize, 40), color }}>{text || 'Preview'}</span>
         </div>
 

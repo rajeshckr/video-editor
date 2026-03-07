@@ -5,8 +5,8 @@
 
 body {
   margin: 0;
-  background: #0d1117;
-  color: #e6edf3;
+  background: var(--editor-bg);
+  color: var(--editor-text);
   font-family: 'Inter', system-ui, sans-serif;
   overflow: hidden;
   height: 100vh;
@@ -17,10 +17,17 @@ body {
   --editor-panel: #161b22;
   --editor-panel2: #1c2128;
   --editor-border: #30363d;
+  --editor-border-boundary: #444444; /* panel/canvas outer borders */
+  --editor-border-timeline: #2a2f36; /* subtle lines inside timeline */
+  --canvas-border: #333333; /* video canvas frame border */
+  --timeline-label: #6e7681; /* mm:ss ticks + "Zoom" text */
+  --track-title: #c9d1d9; /* track name labels */
+  --timecode-bg: #010409; /* dark timer background */
   --editor-accent: #3b82f6;
   --editor-accent-hover: #2563eb;
   --editor-text: #e6edf3;
   --editor-muted: #8b949e;
+  --editor-hint: #555d68; /* lighter hint text & icons */
   --clip-video: #6d28d9;
   --clip-video-border: #7c3aed;
   --clip-audio: #0e7490;
@@ -29,9 +36,48 @@ body {
   --clip-image-border: #d97706;
   --clip-text-bg: #92400e;
   --clip-text-border: #b45309;
+  --clip-text-color: #ffffff; /* standard light text for dark mode media */
+  --editor-track-hover: #162b48;
+  --editor-track-active: #1c4a8f;
   --playhead: #ef4444;
   --in-point: #22c55e;
   --out-point: #ef4444;
+  --editor-canvas: #000000;
+}
+
+html[data-theme='light'] {
+  --editor-bg: #f8fafc;
+  --editor-panel: #ffffff;
+  --editor-panel2: #f1f5f9;
+  --editor-border: #e2e8f0; /* neutral slate-200 panels */
+  --editor-border-boundary: #cbd5e1; /* slate-300, visible panel edges */
+  --editor-border-timeline: #e2e8f0; /* slate-200, subtle timeline lines */
+  --canvas-border: #94a3b8; /* slate-400, canvas frame */
+  --timeline-label: #94a3b8; /* slate-400, mm:ss ticks + "Zoom" */
+  --track-title: #334155; /* slate-700, track name labels */
+  --timecode-bg: #334155; /* slate-800, timer background */
+  --editor-accent: #3b82f6;
+  --editor-accent-hover: #2563eb;
+  --editor-text: #1e293b; /* slate-800 */
+  --editor-muted: #94a3b8; /* slate-400, secondary text */
+  --editor-hint: #6C757D; /* slate-300, very light hint text & icons */
+  /* Media track colors - refined pastels */
+  --clip-video: #e0e7ff;
+  --clip-video-border: #c7d2fe;
+  --clip-audio: #dcfce7;
+  --clip-audio-border: #bbf7d0;
+  --clip-image: #fef9c3;
+  --clip-image-border: #fef08a;
+  --clip-text-bg: #ffedd5;
+  --clip-text-border: #fed7aa;
+  --clip-text-color: #343A40
+; /* slate-800 text on light media */
+  --editor-track-hover: #f1f5f9;
+  --editor-track-active: #e2e8f0;
+  --playhead: #ef4444;
+  --in-point: #22c55e;
+  --out-point: #ef4444;
+  --editor-canvas: #f1f5f9;
 }
 
 /* Scrollbars */
@@ -120,11 +166,20 @@ body {
 /* Panel */
 .panel {
   background: var(--editor-panel);
-  border: 1px solid var(--editor-border);
+  border: 1px solid var(--editor-border-boundary);
   border-radius: 0.5rem;
 }
 
 /* Track colors */
-.track-video { border-left: 3px solid var(--clip-video); }
-.track-audio { border-left: 3px solid var(--clip-audio); }
-.track-caption { border-left: 3px solid var(--clip-image); }
+.track-video { border-left: 3px solid var(--clip-video); background: rgba(109, 40, 217, 0.12); }
+.track-audio { border-left: 3px solid var(--clip-audio); background: rgba(14, 116, 144, 0.12); }
+.track-caption { border-left: 3px solid var(--clip-image); background: rgba(180, 83, 9, 0.12); }
+
+/* Utility classes for custom variables */
+.border-boundary { border-color: var(--editor-border-boundary) !important; }
+.border-timeline { border-color: var(--editor-border-timeline) !important; }
+.border-canvas { border-color: var(--canvas-border) !important; }
+.text-hint { color: var(--editor-hint) !important; }
+.text-timeline-label { color: var(--timeline-label) !important; }
+.text-track-title { color: var(--track-title) !important; }
+.bg-timecode { background-color: var(--timecode-bg) !important; }

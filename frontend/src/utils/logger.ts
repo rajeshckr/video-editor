@@ -16,9 +16,9 @@ type LogLevel = typeof LOG_LEVELS[keyof typeof LOG_LEVELS];
 
 const LOG_COLORS: Record<LogLevel, string> = {
   DEBUG: '#888888',  // Gray
-  INFO: '#22c55e',   // Green
+  INFO: 'var(--in-point)',   // Green
   WARN: '#eab308',   // Yellow
-  ERROR: '#ef4444'   // Red
+  ERROR: 'var(--playhead)'   // Red
 };
 
 interface LoggerConfig {

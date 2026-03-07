@@ -295,13 +295,13 @@ export default function PreviewPlayer() {
   return (
     <div ref={containerRef} className="flex flex-col items-center w-full h-full gap-2 overflow-y-auto p-2">
       {/* Orientation toggle buttons */}
-      <div className="flex items-center gap-2 bg-[#161b22] p-2 rounded-lg border border-[#30363d] shrink-0">
-        <span className="text-xs text-[#8b949e] mr-1">Orientation:</span>
+      <div className="flex items-center gap-2 bg-editor-panel p-2 rounded-lg border border-boundary shrink-0">
+        <span className="text-xs text-editor-muted mr-1">Orientation:</span>
         <button
           className={`p-1.5 rounded transition-colors ${
             project.orientation === 'landscape'
               ? 'bg-blue-600 text-white'
-              : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
+              : 'bg-[var(--editor-bg)] text-editor-muted hover:bg-editor-border'
           }`}
           onClick={() => setOrientation('landscape')}
           title="Landscape (16:9)"
@@ -314,7 +314,7 @@ export default function PreviewPlayer() {
           className={`p-1.5 rounded transition-colors ${
             project.orientation === 'portrait'
               ? 'bg-blue-600 text-white'
-              : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
+              : 'bg-[var(--editor-bg)] text-editor-muted hover:bg-editor-border'
           }`}
           onClick={() => setOrientation('portrait')}
           title="Portrait (9:16)"
@@ -326,8 +326,10 @@ export default function PreviewPlayer() {
       </div>
       
       {/* Video area */}
-      <div className="relative bg-black rounded-lg overflow-hidden shrink-0"
+      <div className="relative rounded-lg overflow-hidden shrink-0 shadow-sm border border-canvas"
         style={{ 
+          background: 'var(--editor-canvas)',
+
           width: `${canvasDisplayWidth}px`, 
           height: `${canvasDisplayHeight}px`,
           maxWidth: '100%'

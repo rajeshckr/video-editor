@@ -130,7 +130,7 @@ export default function MediaLibrary() {
 
   return (
     <div 
-      className={`flex flex-col h-full bg-[#161b22] transition-colors ${
+      className={`flex flex-col h-full bg-editor-panel transition-colors ${
         isDragging ? 'bg-blue-500/10 border-2 border-blue-500 border-dashed' : ''
       }`}
       onDrop={onDrop}
@@ -138,8 +138,8 @@ export default function MediaLibrary() {
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
     >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#30363d]">
-        <span className="text-xs font-semibold text-[#8b949e] uppercase tracking-wider">Media</span>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-boundary">
+        <span className="text-xs font-semibold text-editor-muted uppercase tracking-wider">Media</span>
         <button className="btn btn-ghost p-1" onClick={() => inputRef.current?.click()} title="Add files">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
@@ -154,20 +154,20 @@ export default function MediaLibrary() {
         {Object.entries(uploading).map(([fileName, progress]) => (
           <div
             key={`uploading-${fileName}`}
-            className="flex items-center gap-2 p-2 rounded-md border border-[#30363d] bg-[#0d1117]/50"
+            className="flex items-center gap-2 p-2 rounded-md border border-editor-border bg-editor-bg/50"
           >
             {/* Thumbnail or icon */}
-            <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-[#0d1117] flex items-center justify-center">
-              <span className="text-xs text-[#6e7681]">⏳</span>
+            <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-editor-bg flex items-center justify-center">
+              <span className="text-xs text-[var(--editor-muted)]">⏳</span>
             </div>
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <div className="text-xs text-[#e6edf3] truncate font-medium" title={fileName}>
+              <div className="text-xs text-editor-text truncate font-medium" title={fileName}>
                 {fileName}
               </div>
-              <div className="text-[10px] text-[#8b949e] mt-1">
+              <div className="text-[10px] text-editor-muted mt-1">
                 {/* Progress bar */}
-                <div className="w-full bg-[#161b22] rounded h-1.5 overflow-hidden">
+                <div className="w-full bg-editor-panel rounded h-1.5 overflow-hidden">
                   <div 
                     className="bg-blue-500 h-full transition-all duration-150"
                     style={{ width: `${progress}%` }}
@@ -176,7 +176,7 @@ export default function MediaLibrary() {
               </div>
             </div>
             {/* Progress percentage */}
-            <div className="text-[10px] font-mono text-[#8b949e] whitespace-nowrap">
+            <div className="text-[10px] font-mono text-editor-muted whitespace-nowrap">
               {progress}%
             </div>
           </div>
@@ -185,17 +185,17 @@ export default function MediaLibrary() {
         {assets.length === 0 && Object.keys(uploading).length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4 py-8">
             <div className="mb-3">
-              <svg className="w-16 h-16 text-[#30363d] mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-16 h-16 text-hint mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
               </svg>
             </div>
-            <div className="text-sm text-[#e6edf3] font-medium mb-2">
+            <div className="text-sm text-hint font-medium mb-2">
               No media added yet
             </div>
-            <div className="text-xs text-[#8b949e] leading-relaxed max-w-50">
-              Click the <span className="text-[#e6edf3]">+</span> button above or drag and drop files to begin
+            <div className="text-xs text-hint leading-relaxed max-w-50">
+              Click the <span className="text-editor-text">+</span> button above or drag and drop files to begin
             </div>
-            <div className="text-[10px] text-[#6e7681] mt-3">
+            <div className="text-[10px] text-hint mt-3">
               Supported: MP4, MOV, MKV, WebM, MP3, WAV, JPG, PNG
             </div>
           </div>
@@ -206,10 +206,10 @@ export default function MediaLibrary() {
             draggable
             onDragStart={e => onAssetDragStart(e, asset)}
             onDragEnd={onAssetDragEnd}
-            className="flex items-center gap-2 p-2 rounded-md hover:bg-[#1c2128] cursor-grab active:cursor-grabbing border border-transparent hover:border-[#30363d] transition-colors group"
+            className="flex items-center gap-2 p-2 rounded-md hover:bg-[var(--editor-panel2)] cursor-grab active:cursor-grabbing border border-transparent hover:border-editor-border transition-colors group"
           >
             {/* Thumbnail or icon */}
-            <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-[#0d1117] flex items-center justify-center">
+            <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-editor-bg flex items-center justify-center">
               {asset.thumbnail
                 ? <img src={`${API}${asset.thumbnail}`} alt="" className="w-full h-full object-cover" />
                 : <span className="text-base">{iconForType(asset.type)}</span>
@@ -217,10 +217,10 @@ export default function MediaLibrary() {
             </div>
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <div className="text-xs text-[#e6edf3] truncate font-medium" title={asset.originalName}>
+              <div className="text-xs text-editor-text truncate font-medium" title={asset.originalName}>
                 {asset.originalName}
               </div>
-              <div className="text-[10px] text-[#8b949e]">{formatDuration(asset.duration)}</div>
+              <div className="text-[10px] text-editor-muted">{formatDuration(asset.duration)}</div>
             </div>
             {/* Quick-add button */}
             <button

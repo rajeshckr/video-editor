@@ -70,32 +70,32 @@ export default function App() {
   }, [playbackState, setPlaybackState]);
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d1117] overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-editor-bg overflow-hidden select-none">
       {/* Top Toolbar */}
       <Toolbar />
 
       {/* Middle section: Media Library + Preview + Properties */}
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {/* Media Library */}
-        <div className="w-64 shrink-0 border-r border-[#30363d] overflow-auto">
+        <div className="w-64 shrink-0 border-r border-boundary overflow-auto">
           <MediaLibrary />
         </div>
 
         {/* Preview Player */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 flex items-center justify-center bg-[#0d1117] overflow-hidden p-2">
+          <div className="flex-1 flex items-center justify-center bg-editor-bg overflow-hidden p-2">
             <PreviewPlayer />
           </div>
         </div>
 
         {/* Properties Panel */}
-        <div className="w-56 shrink-0 border-l border-[#30363d] overflow-auto">
+        <div className="w-56 shrink-0 border-l border-boundary overflow-auto">
           <PropertiesPanel />
         </div>
       </div>
 
       {/* Timeline with resize handle */}
-      <div className="border-t border-[#30363d] relative" style={{ height: `${timelineHeight}px`, flexShrink: 0 }}>
+      <div className="border-t border-boundary relative" style={{ height: `${timelineHeight}px`, flexShrink: 0 }}>
         {/* Resize handle */}
         <div
           className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-blue-500 transition-colors z-10 group"
@@ -106,7 +106,7 @@ export default function App() {
             document.body.style.userSelect = 'none';
           }}
         >
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-[#30363d] group-hover:bg-blue-500 transition-colors rounded-full" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-editor-border group-hover:bg-blue-500 transition-colors rounded-full" />
         </div>
         <Timeline />
       </div>

@@ -80,7 +80,7 @@ export default function ExportPanel() {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => setExportPanelOpen(false)}>
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 w-105 space-y-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-editor-panel border border-editor-border rounded-xl p-6 w-105 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Export Video</h2>
           <button className="btn btn-ghost p-1" onClick={() => setExportPanelOpen(false)}>✕</button>
@@ -89,27 +89,27 @@ export default function ExportPanel() {
         {/* In/Out range */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">🟢 In Point (s)</label>
+            <label className="text-xs text-editor-muted mb-1 block">🟢 In Point (s)</label>
             <input className="input text-xs" type="number" step="0.1" value={inPoint.toFixed(2)}
               onChange={e => setInPoint(parseFloat(e.target.value))} />
-            <div className="text-[10px] text-[#8b949e] mt-0.5">{toTC(inPoint)}</div>
+            <div className="text-[10px] text-editor-muted mt-0.5">{toTC(inPoint)}</div>
           </div>
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">🔴 Out Point (s)</label>
+            <label className="text-xs text-editor-muted mb-1 block">🔴 Out Point (s)</label>
             <input className="input text-xs" type="number" step="0.1" value={outPoint.toFixed(2)}
               onChange={e => setOutPoint(parseFloat(e.target.value))} />
-            <div className="text-[10px] text-[#8b949e] mt-0.5">{toTC(outPoint)}</div>
+            <div className="text-[10px] text-editor-muted mt-0.5">{toTC(outPoint)}</div>
           </div>
         </div>
 
-        <div className="bg-[#0d1117] rounded-lg p-2 text-xs text-[#8b949e]">
+        <div className="bg-editor-bg rounded-lg p-2 text-xs text-editor-muted">
           Export range: <span className="text-blue-400 font-medium">{(outPoint - inPoint).toFixed(2)}s</span>
         </div>
 
         {/* Format */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Format</label>
+            <label className="text-xs text-editor-muted mb-1 block">Format</label>
             <select className="input text-xs" value={format} onChange={e => setFormat(e.target.value)}>
               <option value="mp4">MP4 (H.264)</option>
               <option value="webm">WEBM (VP8)</option>
@@ -117,7 +117,7 @@ export default function ExportPanel() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-[#8b949e] mb-1 block">Resolution</label>
+            <label className="text-xs text-editor-muted mb-1 block">Resolution</label>
             <select className="input text-xs" value={resolution} onChange={e => setResolution(e.target.value)}>
               <option value="source">Source ({project.resolution.width}×{project.resolution.height})</option>
               <option value="1080p">1080p (1920×1080)</option>
@@ -129,10 +129,10 @@ export default function ExportPanel() {
         {/* Progress */}
         {status === 'rendering' && (
           <div className="space-y-2">
-            <div className="flex justify-between text-xs text-[#8b949e]">
+            <div className="flex justify-between text-xs text-editor-muted">
               <span>Rendering…</span><span>{progress}%</span>
             </div>
-            <div className="w-full bg-[#30363d] rounded-full h-2">
+            <div className="w-full bg-editor-border rounded-full h-2">
               <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
             </div>
           </div>
