@@ -11,6 +11,9 @@ import PropertiesPanel from './components/PropertiesPanel';
 import { useEditorStore } from './store/editorStore';
 
 const logger = Logger.getInstance('App');
+const TABLET_BREAKPOINT = 1024;
+
+type ExplorerTab = 'media' | 'properties';
 
 export default function App() {
   const {
@@ -21,6 +24,8 @@ export default function App() {
     const saved = localStorage.getItem('timelineHeight');
     return saved ? parseInt(saved) : 280;
   });
+  const [isTabletLayout, setIsTabletLayout] = useState(() => window.innerWidth <= TABLET_BREAKPOINT);
+  const [activeExplorerTab, setActiveExplorerTab] = useState<ExplorerTab>('media');
   const isDraggingRef = useRef(false);
 
   // Log app initialization
@@ -89,29 +94,103 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [playbackState, setPlaybackState]);
 
+  // Switch to icon-based explorer navigation on tablet widths and below.
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(`(max-width: ${TABLET_BREAKPOINT}px)`);
+    const handleLayoutChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setIsTabletLayout(event.matches);
+    };
+
+    handleLayoutChange(mediaQuery);
+
+    if ('addEventListener' in mediaQuery) {
+      mediaQuery.addEventListener('change', handleLayoutChange);
+      return () => mediaQuery.removeEventListener('change', handleLayoutChange);
+    }
+
+    mediaQuery.addListener(handleLayoutChange);
+    return () => mediaQuery.removeListener(handleLayoutChange);
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-editor-bg overflow-hidden select-none">
       {/* Top Toolbar */}
       <Toolbar />
 
-      {/* Middle section: Media Library + Preview + Properties */}
+      {/* Middle section: explorer panels + preview */}
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
-        {/* Media Library */}
-        <div className="w-64 shrink-0 border-r border-boundary overflow-auto">
-          <MediaLibrary />
-        </div>
+        {isTabletLayout ? (
+          <>
+            {/* Explorer icon rail */}
+            <div className="w-12 shrink-0 border-r border-boundary bg-editor-panel2 flex flex-col items-center py-2 gap-2">
+              <button
+                data-testid="explorer-tab-media"
+                className={`p-2 rounded transition-colors ${
+                  activeExplorerTab === 'media'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-editor-muted hover:bg-editor-border'
+                }`}
+                title="Media Explorer"
+                onClick={() => setActiveExplorerTab('media')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="7" height="7" rx="1" strokeWidth="2" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" strokeWidth="2" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" strokeWidth="2" />
+                  <rect x="14" y="14" width="7" height="7" rx="1" strokeWidth="2" />
+                </svg>
+              </button>
+              <button
+                data-testid="explorer-tab-properties"
+                className={`p-2 rounded transition-colors ${
+                  activeExplorerTab === 'properties'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-editor-muted hover:bg-editor-border'
+                }`}
+                title="Properties Explorer"
+                onClick={() => setActiveExplorerTab('properties')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M4 7h16M4 12h16M4 17h16" strokeWidth="2" strokeLinecap="round" />
+                  <circle cx="9" cy="7" r="2" strokeWidth="2" />
+                  <circle cx="15" cy="12" r="2" strokeWidth="2" />
+                  <circle cx="11" cy="17" r="2" strokeWidth="2" />
+                </svg>
+              </button>
+            </div>
 
-        {/* Preview Player */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 flex items-center justify-center bg-editor-bg overflow-hidden p-2">
-            <PreviewPlayer />
-          </div>
-        </div>
+            {/* Active explorer panel */}
+            <div className="shrink-0 border-r border-boundary overflow-auto" style={{ width: 'min(280px, 40vw)' }}>
+              {activeExplorerTab === 'media' ? <MediaLibrary /> : <PropertiesPanel />}
+            </div>
 
-        {/* Properties Panel */}
-        <div className="w-56 shrink-0 border-l border-boundary overflow-auto">
-          <PropertiesPanel />
-        </div>
+            {/* Preview Player */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 flex items-center justify-center bg-editor-bg overflow-hidden p-2">
+                <PreviewPlayer />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Media Library */}
+            <div className="w-64 shrink-0 border-r border-boundary overflow-auto">
+              <MediaLibrary />
+            </div>
+
+            {/* Preview Player */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 flex items-center justify-center bg-editor-bg overflow-hidden p-2">
+                <PreviewPlayer />
+              </div>
+            </div>
+
+            {/* Properties Panel */}
+            <div className="w-56 shrink-0 border-l border-boundary overflow-auto">
+              <PropertiesPanel />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Timeline with resize handle */}
