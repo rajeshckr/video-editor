@@ -77,7 +77,7 @@ export default function PropertiesPanel() {
             <label className="flex flex-col gap-0.5">
               <span className="text-editor-muted">Volume: {Math.round((selectedClip.volume || 1) * 100)}%</span>
               <input type="range" min={0} max={1} step={0.01} value={selectedClip.volume || 1}
-                onChange={e => update('volume', parseFloat(e.target.value))} className="accent-blue-500" />
+                onChange={e => update('volume', parseFloat(e.target.value))} className="range-slider" />
             </label>
           </div>
         )}
@@ -89,7 +89,7 @@ export default function PropertiesPanel() {
             <label className="flex flex-col gap-0.5">
               <span className="text-editor-muted">Opacity: {Math.round((selectedClip.opacity ?? 1) * 100)}%</span>
               <input type="range" min={0} max={1} step={0.01} value={selectedClip.opacity ?? 1}
-                onChange={e => update('opacity', parseFloat(e.target.value))} className="accent-blue-500" />
+                onChange={e => update('opacity', parseFloat(e.target.value))} className="range-slider" />
             </label>
           </div>
 
@@ -99,17 +99,17 @@ export default function PropertiesPanel() {
               <label className="flex flex-col gap-0.5">
                 <span className="text-editor-muted">Zoom: {(selectedClip.transform?.scale ?? 1).toFixed(1)}x</span>
                 <input type="range" min={0.1} max={10} step={0.1} value={selectedClip.transform?.scale ?? 1}
-                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,y:0,rotation:0}), scale: parseFloat(e.target.value) })} className="accent-blue-500" />
+                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,y:0,rotation:0}), scale: parseFloat(e.target.value) })} className="range-slider" />
               </label>
               <label className="flex flex-col gap-0.5">
                 <span className="text-editor-muted">X Position: {Math.round(selectedClip.transform?.x ?? 0)}</span>
                 <input type="range" min={-project.resolution.width} max={project.resolution.width} step={1} value={selectedClip.transform?.x ?? 0}
-                  onChange={e => update('transform', { ...(selectedClip.transform || {y:0,scale:1,rotation:0}), x: parseFloat(e.target.value) })} className="accent-blue-500" />
+                  onChange={e => update('transform', { ...(selectedClip.transform || {y:0,scale:1,rotation:0}), x: parseFloat(e.target.value) })} className="range-slider" />
               </label>
               <label className="flex flex-col gap-0.5">
                 <span className="text-editor-muted">Y Position: {Math.round(selectedClip.transform?.y ?? 0)}</span>
                 <input type="range" min={-project.resolution.height} max={project.resolution.height} step={1} value={selectedClip.transform?.y ?? 0}
-                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,scale:1,rotation:0}), y: parseFloat(e.target.value) })} className="accent-blue-500" />
+                  onChange={e => update('transform', { ...(selectedClip.transform || {x:0,scale:1,rotation:0}), y: parseFloat(e.target.value) })} className="range-slider" />
               </label>
             </div>
           )}

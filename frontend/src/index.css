@@ -144,8 +144,10 @@ html[data-theme='light'] {
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--editor-accent); color: #fff; }
+html[data-theme='light'] .btn-primary { color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--editor-accent-hover); }
 .btn-ghost { background: transparent; color: var(--editor-muted); }
+html[data-theme='light'] .btn-ghost:hover:not(:disabled) { background: rgba(0,0,0,0.07); }
 .btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.07); color: var(--editor-text); }
 .btn-danger { background: #7f1d1d; color: #fca5a5; }
 .btn-danger:hover:not(:disabled) { background: #991b1b; }
@@ -183,3 +185,102 @@ html[data-theme='light'] {
 .text-timeline-label { color: var(--timeline-label) !important; }
 .text-track-title { color: var(--track-title) !important; }
 .bg-timecode { background-color: var(--timecode-bg) !important; }
+
+/* Modal overlay */
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+html[data-theme='light'] .modal-overlay {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Error styling */
+.error-message {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgb(239, 68, 68);
+  color: rgb(220, 38, 38);
+}
+html[data-theme='light'] .error-message {
+  background: rgba(220, 38, 38, 0.15);
+  border-color: rgb(220, 38, 38);
+  color: rgb(153, 27, 27);
+}
+
+/* Select styling for theme support */
+select.input {
+  background-color: var(--editor-bg);
+  color: var(--editor-text);
+}
+select.input option {
+  background-color: var(--editor-panel);
+  color: var(--editor-text);
+}
+html[data-theme='light'] select.input option {
+  background-color: #ffffff;
+  color: #1e293b;
+}
+
+/* Range slider styling - theme aware */
+input[type="range"].range-slider {
+  width: 100%;
+  height: 4px;
+  background: var(--editor-border);
+  border-radius: 2px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="range"].range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--editor-accent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+input[type="range"].range-slider::-webkit-slider-thumb:hover {
+  background: var(--editor-accent-hover);
+}
+
+input[type="range"].range-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--editor-accent);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+input[type="range"].range-slider::-moz-range-thumb:hover {
+  background: var(--editor-accent-hover);
+}
+
+input[type="range"].range-slider::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+input[type="range"].range-slider::-moz-range-progress {
+  background: var(--editor-accent);
+  border-radius: 2px;
+}
+
+/* Progress bar styling - theme aware */
+.progress-bar {
+  background: var(--editor-accent);
+}
+
+/* Modal dialog - explicit light theme styling */
+html[data-theme='light'] [class*="bg-editor-panel"] {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+html[data-theme='light'] [class*="border-editor-border"] {
+  border-color: #e2e8f0 !important;
+}

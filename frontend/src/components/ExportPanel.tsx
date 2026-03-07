@@ -79,10 +79,10 @@ export default function ExportPanel() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => setExportPanelOpen(false)}>
+    <div className="fixed inset-0 flex items-center justify-center z-50 modal-overlay" onClick={() => setExportPanelOpen(false)}>
       <div className="bg-editor-panel border border-editor-border rounded-xl p-6 w-105 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-white">Export Video</h2>
+          <h2 className="text-sm font-semibold text-editor-text">Export Video</h2>
           <button className="btn btn-ghost p-1" onClick={() => setExportPanelOpen(false)}>✕</button>
         </div>
 
@@ -103,7 +103,7 @@ export default function ExportPanel() {
         </div>
 
         <div className="bg-editor-bg rounded-lg p-2 text-xs text-editor-muted">
-          Export range: <span className="text-blue-400 font-medium">{(outPoint - inPoint).toFixed(2)}s</span>
+          Export range: <span className="text-editor-accent font-medium">{(outPoint - inPoint).toFixed(2)}s</span>
         </div>
 
         {/* Format */}
@@ -133,13 +133,13 @@ export default function ExportPanel() {
               <span>Rendering…</span><span>{progress}%</span>
             </div>
             <div className="w-full bg-editor-border rounded-full h-2">
-              <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+              <div className="progress-bar h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
             </div>
           </div>
         )}
 
         {status === 'error' && (
-          <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-xs text-red-400">{error}</div>
+          <div className="error-message border rounded-lg p-3 text-xs">{error}</div>
         )}
 
         {status === 'done' && (
