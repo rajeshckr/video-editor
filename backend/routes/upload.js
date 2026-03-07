@@ -141,9 +141,10 @@ router.post('/', upload.single('file'), async (req, res, next) => {
 router.get('/thumbnail/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
   const thumbPath = path.join(config.thumbnailsPath, filename);
-  if (!fs.existsSync(thumbPath)) return res.status(404).json({ error: 'Not found' });
-  res.sendFile(path.resolve(thumbPath), err => {
-    if (err) console.error(`[Error sending thumbnail] ${thumbPath}:`, err.message);
+  const absPath = path.resolve(thumbPath);
+  if (!fs.existsSync(absPath)) return res.status(404).json({ error: 'Not found' });
+  res.sendFile(absPath, err => {
+    if (err && !res.headersSent) res.status(500).end();
   });
 });
 
@@ -151,10 +152,32 @@ router.get('/thumbnail/:filename', (req, res) => {
 router.get('/file/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
   const filePath = path.join(config.uploadsPath, filename);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Not found' });
-  res.sendFile(path.resolve(filePath), err => {
-    if (err) console.error(`[Error sending file] ${filePath}:`, err.message);
-  });
+  const absPath = path.resolve(filePath);
+  if (!fs.existsSync(absPath)) return res.status(404).json({ error: 'Not found' });
+
+  const stat = fs.statSync(absPath);
+  const total = stat.size;
+  const range = req.headers.range;
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${total}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+      'Content-Type': 'video/mp4',
+    });
+    fs.createReadStream(absPath, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': total,
+      'Content-Type': 'video/mp4',
+      'Accept-Ranges': 'bytes',
+    });
+    fs.createReadStream(absPath).pipe(res);
+  }
 });
 
 module.exports = router;
