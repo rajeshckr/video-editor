@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import Logger from '../utils/logger';
 import type { Clip } from '../types';
@@ -15,7 +15,7 @@ export default function Timeline() {
     project, cursorTime, setCursorTime, zoom, setZoom,
     setInPoint, setOutPoint, selectedClipId, setSelectedClip,
     updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack, assets, setTextEditorOpen,
-    draggedMediaType
+    draggedMediaType, splitClip, moveClip
   } = useEditorStore();
 
   const [isCaptioning, setIsCaptioning] = useState<Record<string, boolean>>({});
@@ -23,9 +23,11 @@ export default function Timeline() {
   const [highlightedTrackId, setHighlightedTrackId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef<{ type: 'playhead' | 'inpoint' | 'outpoint' | 'clip' | 'clipresize'; clipId?: string; trackId?: string; edge?: 'left' | 'right'; startX: number; startTime: number; startDuration?: number; startSrc?: number; clipPos?: number } | null>(null);
+  const dragging = useRef<{ type: 'playhead' | 'inpoint' | 'outpoint' | 'clip' | 'clipresize'; clipId?: string; trackId?: string; clipType?: string; edge?: 'left' | 'right'; startX: number; startTime: number; startDuration?: number; startSrc?: number; clipPos?: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clip: Clip, trackId: string } | null>(null);
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
+  const [draggedClipType, setDraggedClipType] = useState<string | null>(null);
+  const [clipHoverTrackId, setClipHoverTrackId] = useState<string | null>(null);
 
   const timeToX = (t: number) => t * zoom;
   const xToTime = useCallback((x: number) => Math.max(0, x / zoom), [zoom]);
@@ -87,7 +89,26 @@ export default function Timeline() {
       if (d.type === 'clip' && d.clipId && d.trackId) {
         const dx = e.clientX - d.startX;
         const newTime = Math.max(0, d.startTime + dx / zoom);
-        updateClip(d.trackId, d.clipId, { timelinePosition: newTime });
+
+        const sourceTrack = project.tracks.find(track => track.id === d.trackId);
+        const hoverTarget = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const hoverTrackRow = hoverTarget?.closest('[data-track-id]') as HTMLElement | null;
+        const hoverTrackId = hoverTrackRow?.dataset.trackId;
+        const hoverTrackType = hoverTrackRow?.dataset.trackType;
+        setClipHoverTrackId(hoverTrackId || null);
+
+        const canMoveToHoverTrack = Boolean(
+          sourceTrack && hoverTrackId && hoverTrackType && sourceTrack.type === hoverTrackType
+        );
+        const targetTrackId = canMoveToHoverTrack ? hoverTrackId! : d.trackId;
+
+        if (targetTrackId !== d.trackId) {
+          moveClip(d.trackId, targetTrackId, d.clipId, newTime);
+          dragging.current.trackId = targetTrackId;
+        } else {
+          updateClip(d.trackId, d.clipId, { timelinePosition: newTime });
+        }
+
         dragging.current.startX = e.clientX;
         dragging.current.startTime = newTime;
         return;
@@ -111,11 +132,15 @@ export default function Timeline() {
       }
     };
 
-    const onUp = () => { dragging.current = null; };
+    const onUp = () => {
+      dragging.current = null;
+      setDraggedClipType(null);
+      setClipHoverTrackId(null);
+    };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [zoom, project, setCursorTime, setInPoint, setOutPoint, updateClip]);
+  }, [zoom, project, setCursorTime, setInPoint, setOutPoint, updateClip, moveClip]);
 
   // ── Zoom ──────────────────────────────────────────────────────────────────
   const onWheel = (e: React.WheelEvent) => {
@@ -137,6 +162,38 @@ export default function Timeline() {
     setZoom(clamped);
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [project.outPoint, project.tracks, setZoom]);
+
+  const handleSplit = () => {
+    if (!selectedClipId) {
+      addSnackbar('Select a clip first', 'warning');
+      return;
+    }
+    for (const track of project.tracks) {
+      const clip = track.clips.find(c => c.id === selectedClipId);
+      if (clip) {
+        const relativeTime = cursorTime - clip.timelinePosition;
+        if (relativeTime <= 0 || relativeTime >= clip.timelineDuration) {
+          addSnackbar('Position playhead within the clip to split', 'warning');
+          return;
+        }
+        splitClip(track.id, clip.id, cursorTime);
+        break;
+      }
+    }
+  };
+
+  // Check if split is possible (clip selected and cursor within its bounds)
+  const canSplit = useMemo(() => {
+    if (!selectedClipId) return false;
+    for (const track of project.tracks) {
+      const clip = track.clips.find(c => c.id === selectedClipId);
+      if (clip) {
+        const relativeTime = cursorTime - clip.timelinePosition;
+        return relativeTime > 0 && relativeTime < clip.timelineDuration;
+      }
+    }
+    return false;
+  }, [selectedClipId, cursorTime, project.tracks]);
 
   // ── Check if track can accept media type ──────────────────────────────────
   const canAcceptMediaType = (mediaType: string, trackType: string): boolean => {
@@ -310,19 +367,32 @@ export default function Timeline() {
 
       {/* Zoom controls */}
       <div className="flex items-center gap-2 px-3 py-1 border-b border-timeline shrink-0">
-        <span className="text-[10px] text-timeline-label">Zoom</span>
-        <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 0.8)}>−</button>
-        <input type="range" min={2} max={300} value={zoom} onChange={e => setZoom(Number(e.target.value))}
-          className="w-24 h-1 accent-blue-500" />
-        <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 1.25)}>+</button>
-        <span className="text-[10px] text-timeline-label w-14 font-mono" title="Visible time range">
-          {formatVisibleTime(visibleSeconds)}
-        </span>
-        <button className="btn btn-ghost px-1.5 py-0.5 text-[11px] font-mono" onClick={handleZoomToFit} title="Zoom to fit (all clips + out point)">
-          {'<->'}
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-timeline-label">Zoom</span>
+          <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 0.8)}>−</button>
+          <input type="range" min={2} max={300} value={zoom} onChange={e => setZoom(Number(e.target.value))}
+            className="w-24 h-1 accent-blue-500" />
+          <button className="btn btn-ghost p-0.5 text-xs" onClick={() => setZoom(zoom * 1.25)}>+</button>
+          <span className="text-[10px] text-timeline-label w-14 font-mono" title="Visible time range">
+            {formatVisibleTime(visibleSeconds)}
+          </span>
+          <div className="flex items-center gap-1">
+            <button className="btn btn-ghost px-1.5 py-0.5 text-[11px] font-mono" onClick={handleZoomToFit} title="Zoom to fit (all clips + out point)">
+              {'<->'}
+            </button>
+            <button
+              className="btn btn-ghost p-1 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleSplit}
+              disabled={!canSplit}
+              title={canSplit ? "Split Clip at Playhead (S)" : "Select a clip and position playhead to split"}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.242 3 3 0 004.243 4.242z" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
-
       {/* Scrollable area */}
       <div ref={scrollRef} data-testid="timeline-scroll-area" className="flex-1 overflow-auto relative flex flex-col" onWheel={onWheel}>
         {/* Empty state hint - centered inside track lanes (excluding ruler + labels) */}
@@ -483,13 +553,32 @@ export default function Timeline() {
             <div style={{ height: `calc(100% - ${RULER_H}px)`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'auto' }}>
               {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => {
                 const baseBg = draggedMediaType && canAcceptMediaType(draggedMediaType, track.type) ? 'var(--editor-track-hover, rgba(59,130,246,0.1))' : 'var(--editor-bg)';
-                const bg = highlightedTrackId === track.id ? 'var(--editor-track-active, rgba(59,130,246,0.3))' : baseBg;
+                let bg = highlightedTrackId === track.id ? 'var(--editor-track-active, rgba(59,130,246,0.3))' : baseBg;
+                const isClipHover = clipHoverTrackId === track.id;
+                const canAcceptDraggedClip = draggedClipType ? draggedClipType === track.type : false;
+                if (isClipHover && draggedClipType) {
+                  bg = canAcceptDraggedClip ? 'rgba(34,197,94,0.16)' : 'rgba(239,68,68,0.16)';
+                }
 
                 return (
                 <div
                   key={track.id}
                   data-testid="track-row"
-                  style={{ flex: 1, minHeight: '40px', width: totalWidth, position: 'relative', borderBottom: '1px solid var(--editor-border-timeline)', background: bg, transition: 'background 0.15s' }}
+                  data-track-id={track.id}
+                  data-track-type={track.type}
+                  style={{
+                    flex: 1,
+                    minHeight: '40px',
+                    width: totalWidth,
+                    position: 'relative',
+                    borderBottom: '1px solid var(--editor-border-timeline)',
+                    background: bg,
+                    transition: 'background 0.15s, box-shadow 0.15s',
+                    boxShadow: isClipHover && draggedClipType
+                      ? `inset 0 0 0 1px ${canAcceptDraggedClip ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'}`
+                      : undefined,
+                    cursor: isClipHover && draggedClipType && !canAcceptDraggedClip ? 'not-allowed' : undefined,
+                  }}
                   onDragEnter={(e) => {
                     e.preventDefault();
                   }}
@@ -530,17 +619,20 @@ export default function Timeline() {
                         key={clip.id}
                         style={{
                           position: 'absolute', left, top: 4, bottom: 4, width,
-                          background: colors.bg, border: `1px solid ${isSelected ? '#fff' : colors.border}`,
+                          background: colors.bg, border: `2px solid ${isSelected ? '#ffffff' : colors.border}`,
                           borderRadius: 4, cursor: 'grab', overflow: 'hidden',
-                          boxShadow: isSelected ? `0 0 0 2px ${colors.border}` : undefined,
+                          boxShadow: isSelected ? `0 0 0 2px ${colors.border}, 0 0 10px rgba(0,0,0,0.25)` : undefined,
+                          opacity: isSelected ? 1 : 0.7,
                           zIndex: isSelected ? 10 : 2,
                           userSelect: 'none',
                         }}
                         onMouseDown={e => {
                           e.stopPropagation();
+                          setDraggedClipType(track.type);
                           setSelectedClip(clip.id);
                           dragging.current = {
                             type: 'clip', clipId: clip.id, trackId: track.id,
+                            clipType: track.type,
                             startX: e.clientX, startTime: clip.timelinePosition
                           };
                         }}

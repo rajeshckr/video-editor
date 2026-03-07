@@ -2,8 +2,8 @@ import { useEditorStore } from '../store/editorStore';
 
 export default function Toolbar() {
   const {
-    cursorTime, setCursorTime, setExportPanelOpen, undo, redo,
-    splitClip, selectedClipId, project: { tracks }, setTextEditorOpen
+    cursorTime, setCursorTime, setExportPanelOpen,
+    setTextEditorOpen
   } = useEditorStore();
 
   const formatTime = (s: number) => {
@@ -12,14 +12,6 @@ export default function Toolbar() {
     const sec = Math.floor(s % 60);
     const ms = Math.floor((s % 1) * 100);
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(ms).padStart(2,'0')}`;
-  };
-
-  const handleSplit = () => {
-    if (!selectedClipId) return;
-    for (const track of tracks) {
-      const clip = track.clips.find(c => c.id === selectedClipId);
-      if (clip) { splitClip(track.id, clip.id, cursorTime); break; }
-    }
   };
 
   return (
@@ -31,22 +23,6 @@ export default function Toolbar() {
       </div>
 
       <div className="w-px h-6 bg-editor-border mx-1" />
-
-      {/* History */}
-      <button className="btn btn-ghost p-1.5" onClick={undo} title="Undo (Ctrl+Z)">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
-      </button>
-      <button className="btn btn-ghost p-1.5" onClick={redo} title="Redo (Ctrl+Y)">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
-      </button>
-
-      <div className="w-px h-6 bg-editor-border mx-1" />
-
-      {/* Split */}
-      <button className="btn btn-ghost p-1.5" onClick={handleSplit} title="Split Clip at Playhead (S)">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16M4 12h16"/></svg>
-        <span className="text-xs hidden md:block">Split</span>
-      </button>
 
       <div className="flex-1" />
 
