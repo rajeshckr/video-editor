@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import Logger from './utils/logger';
 import Toolbar from './components/Toolbar';
 import MediaLibrary from './components/MediaLibrary';
@@ -12,8 +12,17 @@ import { useEditorStore } from './store/editorStore';
 
 const logger = Logger.getInstance('App');
 const TABLET_BREAKPOINT = 1024;
+const TABLET_ICON_RAIL_WIDTH = 48;
+const VERTICAL_SPLITTER_HITBOX = 12;
+const MIN_PREVIEW_WIDTH = 320;
+const MIN_MEDIA_PANEL_WIDTH = 180;
+const MIN_PROPERTIES_PANEL_WIDTH = 180;
+const MIN_EXPLORER_PANEL_WIDTH = 180;
 
 type ExplorerTab = 'media' | 'properties';
+type VerticalDragTarget = 'media' | 'properties' | 'explorer' | null;
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export default function App() {
   const {
@@ -26,7 +35,21 @@ export default function App() {
   });
   const [isTabletLayout, setIsTabletLayout] = useState(() => window.innerWidth <= TABLET_BREAKPOINT);
   const [activeExplorerTab, setActiveExplorerTab] = useState<ExplorerTab>('media');
-  const isDraggingRef = useRef(false);
+  const [mediaPanelWidth, setMediaPanelWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('mediaPanelWidth'));
+    return Number.isFinite(saved) && saved > 0 ? saved : 256;
+  });
+  const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('propertiesPanelWidth'));
+    return Number.isFinite(saved) && saved > 0 ? saved : 224;
+  });
+  const [explorerPanelWidth, setExplorerPanelWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('explorerPanelWidth'));
+    return Number.isFinite(saved) && saved > 0 ? saved : 280;
+  });
+  const isTimelineDraggingRef = useRef(false);
+  const activeVerticalDragRef = useRef<VerticalDragTarget>(null);
+  const middleSectionRef = useRef<HTMLDivElement>(null);
 
   // Log app initialization
   useEffect(() => {
@@ -38,8 +61,20 @@ export default function App() {
     localStorage.setItem('timelineHeight', timelineHeight.toString());
   }, [timelineHeight]);
 
-  // Ensure timeline height meets minimum when tracks change
   useEffect(() => {
+    localStorage.setItem('mediaPanelWidth', String(Math.round(mediaPanelWidth)));
+  }, [mediaPanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('propertiesPanelWidth', String(Math.round(propertiesPanelWidth)));
+  }, [propertiesPanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('explorerPanelWidth', String(Math.round(explorerPanelWidth)));
+  }, [explorerPanelWidth]);
+
+  // Ensure timeline height meets minimum when tracks change
+  useLayoutEffect(() => {
     const ZOOM_CONTROLS_HEIGHT = 41;
     const RULER_HEIGHT = 28;
     const MIN_TRACK_HEIGHT = 40;
@@ -48,12 +83,12 @@ export default function App() {
     if (timelineHeight < minTimelineHeight) {
       setTimelineHeight(minTimelineHeight);
     }
-  }, [project.tracks.length]);
+  }, [project.tracks.length, timelineHeight]);
 
   // Handle timeline resize drag
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
+      if (!isTimelineDraggingRef.current) return;
       const newHeight = window.innerHeight - e.clientY;
       
       // Calculate minimum height based on number of tracks
@@ -67,7 +102,7 @@ export default function App() {
     };
 
     const handleMouseUp = () => {
-      isDraggingRef.current = false;
+      isTimelineDraggingRef.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
@@ -103,14 +138,77 @@ export default function App() {
 
     handleLayoutChange(mediaQuery);
 
-    if ('addEventListener' in mediaQuery) {
-      mediaQuery.addEventListener('change', handleLayoutChange);
-      return () => mediaQuery.removeEventListener('change', handleLayoutChange);
-    }
-
-    mediaQuery.addListener(handleLayoutChange);
-    return () => mediaQuery.removeListener(handleLayoutChange);
+    mediaQuery.addEventListener('change', handleLayoutChange);
+    return () => mediaQuery.removeEventListener('change', handleLayoutChange);
   }, []);
+
+  // Handle vertical splitters for side panel resizing.
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const dragTarget = activeVerticalDragRef.current;
+      const middle = middleSectionRef.current;
+      if (!dragTarget || !middle) return;
+
+      const rect = middle.getBoundingClientRect();
+      const totalWidth = rect.width;
+      if (totalWidth <= 0) return;
+
+      if (dragTarget === 'explorer') {
+        const maxExplorerWidth = Math.max(
+          MIN_EXPLORER_PANEL_WIDTH,
+          totalWidth - TABLET_ICON_RAIL_WIDTH - MIN_PREVIEW_WIDTH - VERTICAL_SPLITTER_HITBOX,
+        );
+        const desiredWidth = e.clientX - rect.left - TABLET_ICON_RAIL_WIDTH;
+        setExplorerPanelWidth(clamp(desiredWidth, MIN_EXPLORER_PANEL_WIDTH, maxExplorerWidth));
+        return;
+      }
+
+      if (isTabletLayout) return;
+
+      if (dragTarget === 'media') {
+        const maxMediaWidth = Math.max(
+          MIN_MEDIA_PANEL_WIDTH,
+          totalWidth - propertiesPanelWidth - MIN_PREVIEW_WIDTH - (VERTICAL_SPLITTER_HITBOX * 2),
+        );
+        const desiredWidth = e.clientX - rect.left;
+        setMediaPanelWidth(clamp(desiredWidth, MIN_MEDIA_PANEL_WIDTH, maxMediaWidth));
+      }
+
+      if (dragTarget === 'properties') {
+        const maxPropertiesWidth = Math.max(
+          MIN_PROPERTIES_PANEL_WIDTH,
+          totalWidth - mediaPanelWidth - MIN_PREVIEW_WIDTH - (VERTICAL_SPLITTER_HITBOX * 2),
+        );
+        const desiredWidth = rect.right - e.clientX;
+        setPropertiesPanelWidth(clamp(desiredWidth, MIN_PROPERTIES_PANEL_WIDTH, maxPropertiesWidth));
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (!activeVerticalDragRef.current) return;
+      activeVerticalDragRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isTabletLayout, mediaPanelWidth, propertiesPanelWidth]);
+
+  const startVerticalDrag = (target: Exclude<VerticalDragTarget, null>, e: React.MouseEvent) => {
+    e.preventDefault();
+    activeVerticalDragRef.current = target;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const splitterClassName =
+    'relative w-3 shrink-0 cursor-col-resize group flex items-center justify-center select-none';
 
   return (
     <div className="flex flex-col h-screen bg-editor-bg overflow-hidden select-none">
@@ -118,11 +216,14 @@ export default function App() {
       <Toolbar />
 
       {/* Middle section: explorer panels + preview */}
-      <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+      <div ref={middleSectionRef} className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {isTabletLayout ? (
           <>
             {/* Explorer icon rail */}
-            <div className="w-12 shrink-0 border-r border-boundary bg-editor-panel2 flex flex-col items-center py-2 gap-2">
+            <div
+              className="shrink-0 border-r border-boundary bg-editor-panel2 flex flex-col items-center py-2 gap-2"
+              style={{ width: `${TABLET_ICON_RAIL_WIDTH}px` }}
+            >
               <button
                 data-testid="explorer-tab-media"
                 className={`p-2 rounded transition-colors ${
@@ -160,12 +261,30 @@ export default function App() {
             </div>
 
             {/* Active explorer panel */}
-            <div className="shrink-0 border-r border-boundary overflow-auto" style={{ width: 'min(280px, 40vw)' }}>
+            <div className="shrink-0 border-r border-boundary overflow-auto" style={{ width: `${explorerPanelWidth}px` }}>
               {activeExplorerTab === 'media' ? <MediaLibrary /> : <PropertiesPanel />}
             </div>
 
+            {/* Tablet splitter */}
+            <div
+              className={splitterClassName}
+              title="Resize explorer"
+              data-testid="splitter-explorer"
+              onMouseDown={(e) => startVerticalDrag('explorer', e)}
+            >
+              <div className="h-full w-0.5" style={{ backgroundColor: 'var(--editor-border-boundary)' }} />
+              <div
+                className="absolute z-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 px-1 py-2 rounded-full border"
+                style={{ backgroundColor: 'var(--editor-panel2)', borderColor: 'var(--editor-border-boundary)' }}
+              >
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+              </div>
+            </div>
+
             {/* Preview Player */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               <div className="flex-1 flex items-center justify-center bg-editor-bg overflow-hidden p-2">
                 <PreviewPlayer />
               </div>
@@ -174,19 +293,55 @@ export default function App() {
         ) : (
           <>
             {/* Media Library */}
-            <div className="w-64 shrink-0 border-r border-boundary overflow-auto">
+            <div className="shrink-0 border-r border-boundary overflow-auto" style={{ width: `${mediaPanelWidth}px` }}>
               <MediaLibrary />
             </div>
 
+            {/* Left splitter */}
+            <div
+              className={splitterClassName}
+              title="Resize media panel"
+              data-testid="splitter-media"
+              onMouseDown={(e) => startVerticalDrag('media', e)}
+            >
+              <div className="h-full w-0.5" style={{ backgroundColor: 'var(--editor-border-boundary)' }} />
+              <div
+                className="absolute z-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 px-1 py-2 rounded-full border"
+                style={{ backgroundColor: 'var(--editor-panel2)', borderColor: 'var(--editor-border-boundary)' }}
+              >
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+              </div>
+            </div>
+
             {/* Preview Player */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               <div className="flex-1 flex items-center justify-center bg-editor-bg overflow-hidden p-2">
                 <PreviewPlayer />
               </div>
             </div>
 
+            {/* Right splitter */}
+            <div
+              className={splitterClassName}
+              title="Resize properties panel"
+              data-testid="splitter-properties"
+              onMouseDown={(e) => startVerticalDrag('properties', e)}
+            >
+              <div className="h-full w-0.5" style={{ backgroundColor: 'var(--editor-border-boundary)' }} />
+              <div
+                className="absolute z-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 px-1 py-2 rounded-full border"
+                style={{ backgroundColor: 'var(--editor-panel2)', borderColor: 'var(--editor-border-boundary)' }}
+              >
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+                <div className="w-1 h-1 rounded-full bg-editor-muted" />
+              </div>
+            </div>
+
             {/* Properties Panel */}
-            <div className="w-56 shrink-0 border-l border-boundary overflow-auto">
+            <div className="shrink-0 border-l border-boundary overflow-auto" style={{ width: `${propertiesPanelWidth}px` }}>
               <PropertiesPanel />
             </div>
           </>
@@ -200,16 +355,19 @@ export default function App() {
           className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize z-10 group flex items-center justify-center"
           onMouseDown={(e) => {
             e.preventDefault();
-            isDraggingRef.current = true;
+            isTimelineDraggingRef.current = true;
             document.body.style.cursor = 'ns-resize';
             document.body.style.userSelect = 'none';
           }}
         >
           {/* Handle grip */}
-          <div className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-editor-border/50 group-hover:bg-blue-500/70 transition-all">
-            <div className="w-1 h-1 rounded-full bg-editor-muted group-hover:bg-white" />
-            <div className="w-1 h-1 rounded-full bg-editor-muted group-hover:bg-white" />
-            <div className="w-1 h-1 rounded-full bg-editor-muted group-hover:bg-white" />
+          <div
+            className="flex items-center gap-1 px-3 py-0.5 rounded-full border transition-all"
+            style={{ backgroundColor: 'var(--editor-panel2)', borderColor: 'var(--editor-border-boundary)' }}
+          >
+            <div className="w-1 h-1 rounded-full bg-editor-muted" />
+            <div className="w-1 h-1 rounded-full bg-editor-muted" />
+            <div className="w-1 h-1 rounded-full bg-editor-muted" />
           </div>
         </div>
         <Timeline />
