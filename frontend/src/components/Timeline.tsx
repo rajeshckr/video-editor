@@ -308,38 +308,6 @@ export default function Timeline() {
   return (
     <div className="flex flex-col h-full bg-editor-bg overflow-hidden relative">
 
-      {/* Empty state hint - centered over timeline view */}
-      {!hasClips && (
-        <div className="absolute top-32 right-0 left-0 flex justify-center pointer-events-none z-30" style={{ paddingLeft: TRACK_LABEL_W }}>
-          <div className="text-center px-6 py-4 bg-editor-bg rounded-lg border border-editor-border shadow-lg">
-            <div className="mb-2">
-              <svg className="w-10 h-10 text-hint mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
-              </svg>
-            </div>
-            <div className="text-sm text-hint font-medium mb-3">
-              {hasAssets 
-                ? "Drag and drop media to the appropriate track below"
-                : "Upload media first, then drag and drop to timeline"}
-            </div>
-            <div className="flex gap-6 justify-center text-xs">
-              <div className="flex items-center gap-2 text-editor-text">
-                <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-video)', border: '1px solid var(--clip-video-border)' }}></div>
-                <span>Video</span>
-              </div>
-              <div className="flex items-center gap-2 text-editor-text">
-                <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-audio)', border: '1px solid var(--clip-audio-border)' }}></div>
-                <span>Audio</span>
-              </div>
-              <div className="flex items-center gap-2 text-editor-text">
-                <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-image)', border: '1px solid var(--clip-image-border)' }}></div>
-                <span>Text/Caption</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Zoom controls */}
       <div className="flex items-center gap-2 px-3 py-1 border-b border-timeline shrink-0">
         <span className="text-[10px] text-timeline-label">Zoom</span>
@@ -356,11 +324,46 @@ export default function Timeline() {
       </div>
 
       {/* Scrollable area */}
-      <div ref={scrollRef} className="flex-1 overflow-auto relative" onWheel={onWheel}>
-        <div style={{ width: TRACK_LABEL_W + totalWidth, position: 'relative', minHeight: '100%' }} onDragLeave={() => { setHighlightedTrackId(null); }}>
+      <div ref={scrollRef} data-testid="timeline-scroll-area" className="flex-1 overflow-auto relative flex flex-col" onWheel={onWheel}>
+        {/* Empty state hint - centered inside track lanes (excluding ruler + labels) */}
+        {!hasClips && (
+          <div
+            className="absolute pointer-events-none z-30 flex items-center justify-center"
+            style={{ left: TRACK_LABEL_W, right: 0, top: RULER_H, bottom: 0 }}
+          >
+            <div className="text-center px-6 py-4 bg-editor-bg rounded-lg border border-editor-border shadow-lg">
+              <div className="mb-2">
+                <svg className="w-10 h-10 text-hint mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                </svg>
+              </div>
+              <div className="text-sm text-hint font-medium mb-3">
+                {hasAssets
+                  ? "Drag and drop media to the appropriate track below"
+                  : "Upload media first, then drag and drop to timeline"}
+              </div>
+              <div className="flex gap-6 justify-center text-xs">
+                <div className="flex items-center gap-2 text-editor-text">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-video)', border: '1px solid var(--clip-video-border)' }}></div>
+                  <span>Video</span>
+                </div>
+                <div className="flex items-center gap-2 text-editor-text">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-audio)', border: '1px solid var(--clip-audio-border)' }}></div>
+                  <span>Audio</span>
+                </div>
+                <div className="flex items-center gap-2 text-editor-text">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-image)', border: '1px solid var(--clip-image-border)' }}></div>
+                  <span>Text/Caption</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ width: TRACK_LABEL_W + totalWidth, position: 'relative', height: '100%', display: 'flex' }} onDragLeave={() => { setHighlightedTrackId(null); }}>
         
           {/* Sticky label column */}
-          <div style={{ position: 'sticky', left: 0, zIndex: 20, width: TRACK_LABEL_W, float: 'left', backgroundColor: 'var(--editor-panel)' }}>
+          <div style={{ position: 'sticky', left: 0, zIndex: 20, width: TRACK_LABEL_W, flex: '0 0 auto', backgroundColor: 'var(--editor-panel)', height: '100%' }}>
             {/* Ruler corner */}
             <div style={{ height: RULER_H, borderBottom: '1px solid var(--editor-border-timeline)' }} className="flex items-center justify-between px-2 gap-1">
               <span className="text-[10px] text-editor-muted font-semibold flex-1">Tracks</span>
@@ -389,53 +392,55 @@ export default function Timeline() {
               </div>
             </div>
             {/* Track labels */}
-            {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => (
-              <div 
-                key={track.id} 
-                style={{ height: TRACK_H, borderBottom: '1px solid var(--editor-border-timeline)' }}
-                className={`flex items-center px-1 gap-1 track-${track.type} ${draggedTrackId === track.id ? 'opacity-50' : ''}`}
-                draggable
-                onDragStart={(e) => {
-                  setDraggedTrackId(track.id);
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('track/id', track.id);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'move';
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const draggedId = e.dataTransfer.getData('track/id');
-                  if (draggedId && draggedId !== track.id) {
-                    useEditorStore.getState().reorderTrack(draggedId, track.id);
-                  }
-                  setDraggedTrackId(null);
-                }}
-                onDragEnd={() => setDraggedTrackId(null)}
-              >
-                <div className="cursor-grab text-editor-muted px-1 opacity-60 hover:opacity-100 shrink-0" title="Drag to reorder track">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16"/></svg>
+            <div style={{ height: `calc(100% - ${RULER_H}px)`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => (
+                <div
+                  key={track.id}
+                  style={{ flex: 1, minHeight: '40px', borderBottom: '1px solid var(--editor-border-timeline)' }}
+                  className={`flex items-center px-1 gap-1 track-${track.type} ${draggedTrackId === track.id ? 'opacity-50' : ''}`}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggedTrackId(track.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('track/id', track.id);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const draggedId = e.dataTransfer.getData('track/id');
+                    if (draggedId && draggedId !== track.id) {
+                      useEditorStore.getState().reorderTrack(draggedId, track.id);
+                    }
+                    setDraggedTrackId(null);
+                  }}
+                  onDragEnd={() => setDraggedTrackId(null)}
+                >
+                  <div className="cursor-grab text-editor-muted px-1 opacity-60 hover:opacity-100 shrink-0" title="Drag to reorder track">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16"/></svg>
+                  </div>
+                  <span className="text-xs text-track-title flex-1 truncate font-medium ml-1 select-none pointer-events-none">{track.name}</span>
+                  {track.type !== 'audio' && (
+                    <button className="btn btn-ghost p-0.5" title="Toggle visibility"
+                      onClick={() => useEditorStore.getState().toggleTrackVisible(track.id)}>
+                      {track.visible ? '👁' : '🚫'}
+                    </button>
+                  )}
+                  {(track.type === 'audio' || track.type === 'video') && (
+                    <button className="btn btn-ghost p-0.5" title="Mute"
+                      onClick={() => useEditorStore.getState().toggleTrackMute(track.id)}>
+                      {track.muted ? '🔇' : '🔊'}
+                    </button>
+                  )}
                 </div>
-                <span className="text-xs text-track-title flex-1 truncate font-medium ml-1 select-none pointer-events-none">{track.name}</span>
-                {track.type !== 'audio' && (
-                  <button className="btn btn-ghost p-0.5" title="Toggle visibility"
-                    onClick={() => useEditorStore.getState().toggleTrackVisible(track.id)}>
-                    {track.visible ? '👁' : '🚫'}
-                  </button>
-                )}
-                {(track.type === 'audio' || track.type === 'video') && (
-                  <button className="btn btn-ghost p-0.5" title="Mute"
-                    onClick={() => useEditorStore.getState().toggleTrackMute(track.id)}>
-                    {track.muted ? '🔇' : '🔊'}
-                  </button>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Content area (scrolls horizontally) */}
-          <div style={{ marginLeft: TRACK_LABEL_W, overflow: 'hidden' }}>
+          <div style={{ overflow: 'auto', height: '100%', display: 'flex', flexDirection: 'column', flex: '0 0 auto' }}>
             {/* Ruler SVG */}
             <svg
               width={totalWidth} height={RULER_H}
@@ -475,105 +480,108 @@ export default function Timeline() {
             </svg>
 
             {/* Track rows */}
-            {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => {
-              const baseBg = draggedMediaType && canAcceptMediaType(draggedMediaType, track.type) ? 'var(--editor-track-hover, rgba(59,130,246,0.1))' : 'var(--editor-bg)';
-              const bg = highlightedTrackId === track.id ? 'var(--editor-track-active, rgba(59,130,246,0.3))' : baseBg;
-              
-              return (
-              <div
-                key={track.id}
-                style={{ height: TRACK_H, width: totalWidth, position: 'relative', borderBottom: '1px solid var(--editor-border-timeline)', background: bg, transition: 'background 0.15s' }}
-                onDragEnter={(e) => {
-                  e.preventDefault();
-                }}
-                onDragLeave={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  if (
-                    e.clientY <= rect.top ||
-                    e.clientY >= rect.bottom ||
-                    e.clientX <= rect.left ||
-                    e.clientX >= rect.right
-                  ) {
-                    setHighlightedTrackId(prev => (prev === track.id ? null : prev));
-                  }
-                }}
-                onDrop={e => onTrackDrop(e, track.id, track.type)}
-                onDragOver={e => {
-                  e.preventDefault();
-                  const types = Array.from(e.dataTransfer.types);
-                  const mediaType = types.find(t => t.startsWith('application/x-media-'))?.replace('application/x-media-', '');
-                  
-                  if (mediaType && canAcceptMediaType(mediaType, track.type)) {
-                    setHighlightedTrackId(track.id);
-                  }
-                }}
-              >
-                {/* Playhead line */}
-                <div style={{ position: 'absolute', left: timeToX(cursorTime), top: 0, bottom: 0, width: 1, background: 'var(--playhead)', zIndex: 5, pointerEvents: 'none' }} />
+            <div style={{ height: `calc(100% - ${RULER_H}px)`, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', overflow: 'auto' }}>
+              {[...project.tracks].sort((a, b) => b.trackNumber - a.trackNumber).map(track => {
+                const baseBg = draggedMediaType && canAcceptMediaType(draggedMediaType, track.type) ? 'var(--editor-track-hover, rgba(59,130,246,0.1))' : 'var(--editor-bg)';
+                const bg = highlightedTrackId === track.id ? 'var(--editor-track-active, rgba(59,130,246,0.3))' : baseBg;
 
-                {/* Clips */}
-                {track.clips.map(clip => {
-                  const colors = clipColor(clip.type);
-                  const left = timeToX(clip.timelinePosition);
-                  const width = Math.max(4, timeToX(clip.timelineDuration));
-                  const isSelected = clip.id === selectedClipId;
+                return (
+                <div
+                  key={track.id}
+                  data-testid="track-row"
+                  style={{ flex: 1, minHeight: '40px', width: totalWidth, position: 'relative', borderBottom: '1px solid var(--editor-border-timeline)', background: bg, transition: 'background 0.15s' }}
+                  onDragEnter={(e) => {
+                    e.preventDefault();
+                  }}
+                  onDragLeave={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    if (
+                      e.clientY <= rect.top ||
+                      e.clientY >= rect.bottom ||
+                      e.clientX <= rect.left ||
+                      e.clientX >= rect.right
+                    ) {
+                      setHighlightedTrackId(prev => (prev === track.id ? null : prev));
+                    }
+                  }}
+                  onDrop={e => onTrackDrop(e, track.id, track.type)}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    const types = Array.from(e.dataTransfer.types);
+                    const mediaType = types.find(t => t.startsWith('application/x-media-'))?.replace('application/x-media-', '');
 
-                  return (
-                    <div
-                      key={clip.id}
-                      style={{
-                        position: 'absolute', left, top: 4, height: TRACK_H - 8, width,
-                        background: colors.bg, border: `1px solid ${isSelected ? '#fff' : colors.border}`,
-                        borderRadius: 4, cursor: 'grab', overflow: 'hidden',
-                        boxShadow: isSelected ? `0 0 0 2px ${colors.border}` : undefined,
-                        zIndex: isSelected ? 10 : 2,
-                        userSelect: 'none',
-                      }}
-                      onMouseDown={e => {
-                        e.stopPropagation();
-                        setSelectedClip(clip.id);
-                        dragging.current = {
-                          type: 'clip', clipId: clip.id, trackId: track.id,
-                          startX: e.clientX, startTime: clip.timelinePosition
-                        };
-                      }}
-                      onContextMenu={e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setContextMenu({ x: e.clientX, y: e.clientY, clip, trackId: track.id });
-                      }}
-                    >
-                      {/* Left resize handle */}
-                      <div className="clip-handle clip-handle-left"
-                        onMouseDown={e => { e.stopPropagation(); dragging.current = { type: 'clipresize', clipId: clip.id, trackId: track.id, edge: 'left', startX: e.clientX, startTime: clip.timelinePosition, startDuration: clip.timelineDuration, startSrc: clip.srcStart, clipPos: clip.timelinePosition }; }} />
+                    if (mediaType && canAcceptMediaType(mediaType, track.type)) {
+                      setHighlightedTrackId(track.id);
+                    }
+                  }}
+                >
+                  {/* Playhead line */}
+                  <div style={{ position: 'absolute', left: timeToX(cursorTime), top: 0, bottom: 0, width: 1, background: 'var(--playhead)', zIndex: 5, pointerEvents: 'none' }} />
 
-                      {/* Clip content */}
-                      <div className="px-1.5 py-0.5 h-full flex flex-col justify-center gap-0.5 pointer-events-none">
-                        {/* Thumbnail strip for video */}
-                        {clip.type === 'video' && clip.thumbnail && (
-                          <div className="absolute inset-0 w-full h-full opacity-50 bg-cover bg-center"
-                            style={{ backgroundImage: `url(http://localhost:3001${clip.thumbnail})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
-                        )}
-                        {/* Waveform bg for audio */}
-                        {clip.type === 'audio' && <div className="absolute inset-0 waveform-bg opacity-40" />}
+                  {/* Clips */}
+                  {track.clips.map(clip => {
+                    const colors = clipColor(clip.type);
+                    const left = timeToX(clip.timelinePosition);
+                    const width = Math.max(4, timeToX(clip.timelineDuration));
+                    const isSelected = clip.id === selectedClipId;
 
-                        <span className="text-[10px] font-medium truncate relative z-10" style={{ color: colors.text }}>
-                          {clip.type === 'text' ? `"${clip.text || 'Text'}"` : clip.originalName}
-                        </span>
-                        <span className="text-[9px] relative z-10" style={{ color: colors.text, opacity: 0.7 }}>
-                          {clip.timelineDuration.toFixed(1)}s
-                        </span>
+                    return (
+                      <div
+                        key={clip.id}
+                        style={{
+                          position: 'absolute', left, top: 4, bottom: 4, width,
+                          background: colors.bg, border: `1px solid ${isSelected ? '#fff' : colors.border}`,
+                          borderRadius: 4, cursor: 'grab', overflow: 'hidden',
+                          boxShadow: isSelected ? `0 0 0 2px ${colors.border}` : undefined,
+                          zIndex: isSelected ? 10 : 2,
+                          userSelect: 'none',
+                        }}
+                        onMouseDown={e => {
+                          e.stopPropagation();
+                          setSelectedClip(clip.id);
+                          dragging.current = {
+                            type: 'clip', clipId: clip.id, trackId: track.id,
+                            startX: e.clientX, startTime: clip.timelinePosition
+                          };
+                        }}
+                        onContextMenu={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu({ x: e.clientX, y: e.clientY, clip, trackId: track.id });
+                        }}
+                      >
+                        {/* Left resize handle */}
+                        <div className="clip-handle clip-handle-left"
+                          onMouseDown={e => { e.stopPropagation(); dragging.current = { type: 'clipresize', clipId: clip.id, trackId: track.id, edge: 'left', startX: e.clientX, startTime: clip.timelinePosition, startDuration: clip.timelineDuration, startSrc: clip.srcStart, clipPos: clip.timelinePosition }; }} />
+
+                        {/* Clip content */}
+                        <div className="px-1.5 py-0.5 h-full flex flex-col justify-center gap-0.5 pointer-events-none">
+                          {/* Thumbnail strip for video */}
+                          {clip.type === 'video' && clip.thumbnail && (
+                            <div className="absolute inset-0 w-full h-full opacity-50 bg-cover bg-center"
+                              style={{ backgroundImage: `url(http://localhost:3001${clip.thumbnail})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
+                          )}
+                          {/* Waveform bg for audio */}
+                          {clip.type === 'audio' && <div className="absolute inset-0 waveform-bg opacity-40" />}
+
+                          <span className="text-[10px] font-medium truncate relative z-10" style={{ color: colors.text }}>
+                            {clip.type === 'text' ? `"${clip.text || 'Text'}"` : clip.originalName}
+                          </span>
+                          <span className="text-[9px] relative z-10" style={{ color: colors.text, opacity: 0.7 }}>
+                            {clip.timelineDuration.toFixed(1)}s
+                          </span>
+                        </div>
+
+                        {/* Right resize handle */}
+                        <div className="clip-handle clip-handle-right"
+                          onMouseDown={e => { e.stopPropagation(); dragging.current = { type: 'clipresize', clipId: clip.id, trackId: track.id, edge: 'right', startX: e.clientX, startTime: clip.timelinePosition, startDuration: clip.timelineDuration, startSrc: clip.srcEnd }; }} />
                       </div>
-
-                      {/* Right resize handle */}
-                      <div className="clip-handle clip-handle-right"
-                        onMouseDown={e => { e.stopPropagation(); dragging.current = { type: 'clipresize', clipId: clip.id, trackId: track.id, edge: 'right', startX: e.clientX, startTime: clip.timelinePosition, startDuration: clip.timelineDuration, startSrc: clip.srcEnd }; }} />
-                    </div>
-                  );
-                })}
-              </div>
-              );
-            })}
+                    );
+                  })}
+                </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

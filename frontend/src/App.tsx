@@ -14,7 +14,7 @@ const logger = Logger.getInstance('App');
 
 export default function App() {
   const {
-    exportPanelOpen, textEditorOpen, setPlaybackState, playbackState
+    exportPanelOpen, textEditorOpen, setPlaybackState, playbackState, project
   } = useEditorStore();
 
   const [timelineHeight, setTimelineHeight] = useState(() => {
@@ -33,12 +33,32 @@ export default function App() {
     localStorage.setItem('timelineHeight', timelineHeight.toString());
   }, [timelineHeight]);
 
+  // Ensure timeline height meets minimum when tracks change
+  useEffect(() => {
+    const ZOOM_CONTROLS_HEIGHT = 41;
+    const RULER_HEIGHT = 28;
+    const MIN_TRACK_HEIGHT = 40;
+    const minTimelineHeight = ZOOM_CONTROLS_HEIGHT + RULER_HEIGHT + (project.tracks.length * MIN_TRACK_HEIGHT);
+    
+    if (timelineHeight < minTimelineHeight) {
+      setTimelineHeight(minTimelineHeight);
+    }
+  }, [project.tracks.length]);
+
   // Handle timeline resize drag
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDraggingRef.current) return;
       const newHeight = window.innerHeight - e.clientY;
-      setTimelineHeight(Math.max(150, Math.min(600, newHeight)));
+      
+      // Calculate minimum height based on number of tracks
+      // Zoom controls: ~41px, Ruler: 28px, Min track height: 40px each
+      const ZOOM_CONTROLS_HEIGHT = 41;
+      const RULER_HEIGHT = 28;
+      const MIN_TRACK_HEIGHT = 40;
+      const minTimelineHeight = ZOOM_CONTROLS_HEIGHT + RULER_HEIGHT + (project.tracks.length * MIN_TRACK_HEIGHT);
+      
+      setTimelineHeight(Math.max(minTimelineHeight, Math.min(600, newHeight)));
     };
 
     const handleMouseUp = () => {
@@ -53,7 +73,7 @@ export default function App() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [project.tracks.length]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -95,10 +115,10 @@ export default function App() {
       </div>
 
       {/* Timeline with resize handle */}
-      <div className="border-t border-boundary relative" style={{ height: `${timelineHeight}px`, flexShrink: 0 }}>
+      <div className="border-t border-boundary relative mt-auto" style={{ height: `${timelineHeight}px`, flexShrink: 0 }}>
         {/* Resize handle */}
         <div
-          className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-blue-500 transition-colors z-10 group"
+          className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize z-10 group flex items-center justify-center"
           onMouseDown={(e) => {
             e.preventDefault();
             isDraggingRef.current = true;
@@ -106,7 +126,12 @@ export default function App() {
             document.body.style.userSelect = 'none';
           }}
         >
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-editor-border group-hover:bg-blue-500 transition-colors rounded-full" />
+          {/* Handle grip */}
+          <div className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-editor-border/50 group-hover:bg-blue-500/70 transition-all">
+            <div className="w-1 h-1 rounded-full bg-editor-muted group-hover:bg-white" />
+            <div className="w-1 h-1 rounded-full bg-editor-muted group-hover:bg-white" />
+            <div className="w-1 h-1 rounded-full bg-editor-muted group-hover:bg-white" />
+          </div>
         </div>
         <Timeline />
       </div>
