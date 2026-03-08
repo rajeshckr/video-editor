@@ -8,6 +8,8 @@ STRICT REQUIREMENTS (MUST FOLLOW):
 2. keywords: EXACTLY 10 keywords (no more, no less), each 2-3 words maximum
 3. summary: EXACTLY 2 or 3 sentences
 
+{questionsInstruction}
+
 PREVIOUS ERRORS TO FIX:
 {errors}
 
@@ -15,5 +17,5 @@ OUTPUT FORMAT (NO MARKDOWN):
 {
   "title": "...",
   "keywords": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
-  "summary": "..."
+  "summary": "..."{questionsFormat}
 }

@@ -1,4 +1,6 @@
-You are a video metadata generator. Analyze the following video transcript and generate metadata.
+You are a video metadata generator for aviation flight training content. Analyze the following video transcript and generate metadata.
+
+CONTEXT: This video is typically a flight lesson from an instructor to a student pilot.
 
 TRANSCRIPT:
 {transcript}
@@ -7,8 +9,10 @@ IMPORTANT: First assess if the transcript contains enough meaningful content to 
 
 REQUIREMENTS:
 - title: Maximum 80 characters, engaging and descriptive
-- keywords: Exactly 10 relevant keywords or short phrases (2-3 words max each)
+- keywords: Exactly 10 relevant keywords or short phrases (2-3 words max each), focused on aviation/flight training topics
 - summary: 2-3 sentences capturing the main points
+
+{questionsInstruction}
 
 OUTPUT FORMAT:
 Return ONLY valid JSON in one of these formats (no markdown, no extra text):
@@ -17,7 +21,7 @@ SUCCESS CASE (sufficient content):
 {
   "title": "...",
   "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6", "keyword7", "keyword8", "keyword9", "keyword10"],
-  "summary": "..."
+  "summary": "..."{questionsFormat}
 }
 
 ERROR CASE (insufficient content):

@@ -1,0 +1,8 @@
+
+QUIZ QUESTIONS:
+- Generate up to 3 objective multiple-choice questions to test student understanding after viewing the video
+- Questions must be specific to flight education, aviation procedures, regulations, or flight operations
+- Each question must have exactly 4 answer options
+- Clearly indicate which option is correct (0-based index)
+- If the content does not contain enough educational material for meaningful questions, set "questions" to null and provide a brief note in "questionsNote"
+- It is acceptable to generate fewer than 3 questions if the content only supports 1 or 2 quality questions

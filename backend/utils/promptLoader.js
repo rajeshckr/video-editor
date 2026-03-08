@@ -7,6 +7,22 @@ const path = require('path');
  */
 
 const PROMPTS_DIR = path.join(__dirname, '../prompts');
+const FRAGMENTS_DIR = path.join(PROMPTS_DIR, 'fragments');
+
+/**
+ * Load a prompt fragment from the fragments directory
+ * @param {string} fragmentName - Name of the fragment file (without .txt extension)
+ * @returns {string} The fragment content
+ */
+function loadFragment(fragmentName) {
+  const fragmentPath = path.join(FRAGMENTS_DIR, `${fragmentName}.txt`);
+  
+  if (!fs.existsSync(fragmentPath)) {
+    return ''; // Return empty string if fragment doesn't exist
+  }
+  
+  return fs.readFileSync(fragmentPath, 'utf8');
+}
 
 /**
  * Load a prompt template from file and replace placeholders
@@ -58,6 +74,7 @@ function listPrompts() {
 
 module.exports = {
   loadPrompt,
+  loadFragment,
   promptExists,
   listPrompts
 };

@@ -1,6 +1,6 @@
 const Logger = require('../../utils/logger');
 const logger = Logger.getInstance('MetadataService');
-const { loadPrompt } = require('../../utils/promptLoader');
+const { loadPrompt, loadFragment } = require('../../utils/promptLoader');
 
 /**
  * AI Metadata Generation Service
@@ -11,12 +11,69 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = 'gpt-4o-mini'; // Using gpt-4o-mini (gpt-5-mini doesn't exist yet)
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
+function previewText(value, maxLength = 500) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function buildOpenAIRequest(prompt, temperature) {
+  return {
+    model: OPENAI_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a helpful assistant that generates video metadata. Always respond with valid JSON only, no markdown formatting.'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature,
+    max_tokens: 800,
+    response_format: { type: 'json_object' }
+  };
+}
+
+function logOpenAIRequest(context, requestPayload) {
+  logger.info('➡️ OpenAI request', {
+    context,
+    url: OPENAI_API_URL,
+    model: requestPayload.model,
+    temperature: requestPayload.temperature,
+    max_tokens: requestPayload.max_tokens,
+    response_format: requestPayload.response_format,
+    systemPromptPreview: previewText(requestPayload.messages?.[0]?.content, 200),
+    userPromptLength: requestPayload.messages?.[1]?.content?.length || 0,
+    userPromptPreview: previewText(requestPayload.messages?.[1]?.content, 800)
+  });
+}
+
+function logOpenAIResponse(context, data) {
+  const firstChoice = data?.choices?.[0];
+  logger.info('⬅️ OpenAI response', {
+    context,
+    id: data?.id,
+    model: data?.model,
+    created: data?.created,
+    finish_reason: firstChoice?.finish_reason,
+    usage: data?.usage || null,
+    contentPreview: previewText(firstChoice?.message?.content, 1200)
+  });
+}
+
 /**
  * Generate video metadata from transcript using OpenAI
  * @param {string} transcript - Full transcript text
- * @returns {Promise<Object>} Metadata object with title, keywords, summary
+ * @param {Object} options - Generation options
+ * @param {boolean} options.generateQuestions - Whether to generate quiz questions (default: false)
+ * @returns {Promise<Object>} Metadata object with title, keywords, summary, and optionally questions
  */
-async function generateVideoMetadata(transcript) {
+async function generateVideoMetadata(transcript, options = {}) {
+  const { generateQuestions = false } = options;
+  
   if (!OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY not configured in .env');
   }
@@ -34,39 +91,34 @@ async function generateVideoMetadata(transcript) {
   logger.info('Generating metadata from transcript', { 
     transcriptLength: transcript.length,
     wordCount: words.length,
-    trimmed: words.length > 4000
+    trimmed: words.length > 4000,
+    generateQuestions
   });
+
+  // Load prompt template fragments conditionally
+  const questionsInstruction = generateQuestions ? loadFragment('questions-instruction') : '';
+  const questionsFormat = generateQuestions ? loadFragment('questions-format') : '';
 
   // Load prompt template from filesystem
   const prompt = loadPrompt('metadata-generation', {
-    transcript: trimmedTranscript
+    transcript: trimmedTranscript,
+    questionsInstruction,
+    questionsFormat
   });
 
   try {
     logger.time('openai-api-call');
     
+    const requestPayload = buildOpenAIRequest(prompt, 0.7);
+    logOpenAIRequest('initial', requestPayload);
+
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${OPENAI_API_KEY}`
       },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant that generates video metadata. Always respond with valid JSON only, no markdown formatting.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 800,
-        response_format: { type: 'json_object' }
-      })
+      body: JSON.stringify(requestPayload)
     });
 
     logger.timeEnd('openai-api-call');
@@ -78,6 +130,7 @@ async function generateVideoMetadata(transcript) {
     }
 
     const data = await response.json();
+    logOpenAIResponse('initial', data);
     
     // Log token usage
     if (data.usage) {
@@ -123,7 +176,7 @@ async function generateVideoMetadata(transcript) {
       // If validation fails, try one more time with stricter prompt
       if (validation.retryable) {
         logger.info('Retrying with stricter prompt...');
-        return await retryWithStricterPrompt(transcript, validation.errors);
+        return await retryWithStricterPrompt(transcript, validation.errors, generateQuestions);
       }
       
       throw new Error(`Invalid metadata format: ${validation.errors.join(', ')}`);
@@ -136,7 +189,15 @@ async function generateVideoMetadata(transcript) {
       summary: metadata.summary,
     };
 
-    logger.info('✅ Metadata generated successfully');
+    // Include questions if they were generated
+    if (generateQuestions) {
+      normalizedMetadata.questions = metadata.questions || null;
+      if (metadata.questionsNote) {
+        normalizedMetadata.questionsNote = metadata.questionsNote;
+      }
+    }
+
+    logger.info('✅ Metadata generated successfully', { includesQuestions: generateQuestions });
     return normalizedMetadata;
 
   } catch (error) {
@@ -183,6 +244,38 @@ function validateMetadata(metadata) {
     }
   }
 
+  // Validate questions if present (optional field)
+  if (metadata.questions !== undefined) {
+    if (metadata.questions === null) {
+      // Null is valid (AI couldn't generate questions)
+      if (metadata.questionsNote && typeof metadata.questionsNote !== 'string') {
+        errors.push('questionsNote should be a string when questions is null');
+      }
+    } else if (Array.isArray(metadata.questions)) {
+      if (metadata.questions.length > 3) {
+        errors.push(`questions array too long (${metadata.questions.length} > 3)`);
+      }
+      metadata.questions.forEach((q, idx) => {
+        if (!q.question || typeof q.question !== 'string') {
+          errors.push(`questions[${idx}].question missing or not a string`);
+        }
+        if (!Array.isArray(q.options) || q.options.length !== 4) {
+          errors.push(`questions[${idx}].options must be array of exactly 4 items`);
+        } else if (!q.options.every(opt => typeof opt === 'string' && opt.length > 0)) {
+          errors.push(`questions[${idx}].options contain invalid entries`);
+        }
+        if (typeof q.correctAnswer !== 'number' || q.correctAnswer < 0 || q.correctAnswer > 3) {
+          errors.push(`questions[${idx}].correctAnswer must be 0-3`);
+        }
+        if (!q.explanation || typeof q.explanation !== 'string') {
+          errors.push(`questions[${idx}].explanation missing or not a string`);
+        }
+      });
+    } else {
+      errors.push('questions must be null or an array');
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,
@@ -194,21 +287,46 @@ function validateMetadata(metadata) {
  * Retry with a stricter prompt emphasizing the failed validation rules
  * @param {string} transcript 
  * @param {string[]} validationErrors 
+ * @param {boolean} generateQuestions
  * @returns {Promise<Object>}
  */
-async function retryWithStricterPrompt(transcript, validationErrors) {
-  logger.warn('Retrying metadata generation with stricter constraints', { previousErrors: validationErrors });
+async function retryWithStricterPrompt(transcript, validationErrors, generateQuestions = false) {
+  logger.warn('Retrying metadata generation with stricter constraints', { previousErrors: validationErrors, generateQuestions });
 
   const words = transcript.split(/\s+/);
   const trimmedTranscript = words.length > 4000 
     ? words.slice(0, 4000).join(' ') + '...'
     : transcript;
 
+  // Load prompt template fragments conditionally
+  const questionsInstruction = generateQuestions ? loadFragment('questions-instruction') : '';
+  const questionsFormat = generateQuestions ? loadFragment('questions-format') : '';
+
   // Load retry prompt template from filesystem
   const strictPrompt = loadPrompt('metadata-generation-retry', {
     transcript: trimmedTranscript,
-    errors: validationErrors.join('\n')
+    errors: validationErrors.join('\n'),
+    questionsInstruction,
+    questionsFormat
   });
+
+  const retryRequestPayload = {
+    model: OPENAI_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a precise assistant. Follow the requirements exactly. Return only valid JSON, no markdown.'
+      },
+      {
+        role: 'user',
+        content: strictPrompt
+      }
+    ],
+    temperature: 0.3, // Lower temperature for more precise output
+    max_tokens: 800,
+    response_format: { type: 'json_object' }
+  };
+  logOpenAIRequest('retry', retryRequestPayload);
 
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
@@ -216,22 +334,7 @@ async function retryWithStricterPrompt(transcript, validationErrors) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a precise assistant. Follow the requirements exactly. Return only valid JSON, no markdown.'
-        },
-        {
-          role: 'user',
-          content: strictPrompt
-        }
-      ],
-      temperature: 0.3, // Lower temperature for more precise output
-      max_tokens: 800,
-      response_format: { type: 'json_object' }
-    })
+    body: JSON.stringify(retryRequestPayload)
   });
 
   if (!response.ok) {
@@ -239,6 +342,7 @@ async function retryWithStricterPrompt(transcript, validationErrors) {
   }
 
   const data = await response.json();
+  logOpenAIResponse('retry', data);
   const aiResponse = data.choices?.[0]?.message?.content;
   
   if (!aiResponse) {
