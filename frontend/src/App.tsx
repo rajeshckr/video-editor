@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Logger from './utils/logger';
 import Toolbar from './components/Toolbar';
 import MediaLibrary from './components/MediaLibrary';
@@ -18,11 +18,16 @@ const MIN_PREVIEW_WIDTH = 320;
 const MIN_MEDIA_PANEL_WIDTH = 180;
 const MIN_PROPERTIES_PANEL_WIDTH = 180;
 const MIN_EXPLORER_PANEL_WIDTH = 180;
+const ZOOM_CONTROLS_HEIGHT = 41;
+const RULER_HEIGHT = 28;
+const MIN_TRACK_HEIGHT = 40;
 
 type ExplorerTab = 'media' | 'properties';
 type VerticalDragTarget = 'media' | 'properties' | 'explorer' | null;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const getMinTimelineHeight = (trackCount: number) =>
+  ZOOM_CONTROLS_HEIGHT + RULER_HEIGHT + (trackCount * MIN_TRACK_HEIGHT);
 
 export default function App() {
   const {
@@ -50,6 +55,8 @@ export default function App() {
   const isTimelineDraggingRef = useRef(false);
   const activeVerticalDragRef = useRef<VerticalDragTarget>(null);
   const middleSectionRef = useRef<HTMLDivElement>(null);
+  const minTimelineHeight = getMinTimelineHeight(project.tracks.length);
+  const effectiveTimelineHeight = Math.max(timelineHeight, minTimelineHeight);
 
   // Log app initialization
   useEffect(() => {
@@ -73,31 +80,12 @@ export default function App() {
     localStorage.setItem('explorerPanelWidth', String(Math.round(explorerPanelWidth)));
   }, [explorerPanelWidth]);
 
-  // Ensure timeline height meets minimum when tracks change
-  useLayoutEffect(() => {
-    const ZOOM_CONTROLS_HEIGHT = 41;
-    const RULER_HEIGHT = 28;
-    const MIN_TRACK_HEIGHT = 40;
-    const minTimelineHeight = ZOOM_CONTROLS_HEIGHT + RULER_HEIGHT + (project.tracks.length * MIN_TRACK_HEIGHT);
-    
-    if (timelineHeight < minTimelineHeight) {
-      setTimelineHeight(minTimelineHeight);
-    }
-  }, [project.tracks.length, timelineHeight]);
-
   // Handle timeline resize drag
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isTimelineDraggingRef.current) return;
       const newHeight = window.innerHeight - e.clientY;
-      
-      // Calculate minimum height based on number of tracks
-      // Zoom controls: ~41px, Ruler: 28px, Min track height: 40px each
-      const ZOOM_CONTROLS_HEIGHT = 41;
-      const RULER_HEIGHT = 28;
-      const MIN_TRACK_HEIGHT = 40;
-      const minTimelineHeight = ZOOM_CONTROLS_HEIGHT + RULER_HEIGHT + (project.tracks.length * MIN_TRACK_HEIGHT);
-      
+
       setTimelineHeight(Math.max(minTimelineHeight, Math.min(600, newHeight)));
     };
 
@@ -113,7 +101,7 @@ export default function App() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [project.tracks.length]);
+  }, [minTimelineHeight]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -349,7 +337,7 @@ export default function App() {
       </div>
 
       {/* Timeline with resize handle */}
-      <div className="border-t border-boundary relative mt-auto" style={{ height: `${timelineHeight}px`, flexShrink: 0 }}>
+      <div className="border-t border-boundary relative mt-auto" style={{ height: `${effectiveTimelineHeight}px`, flexShrink: 0 }}>
         {/* Resize handle */}
         <div
           className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize z-10 group flex items-center justify-center"
