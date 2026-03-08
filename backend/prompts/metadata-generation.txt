@@ -1,0 +1,28 @@
+You are a video metadata generator. Analyze the following video transcript and generate metadata.
+
+TRANSCRIPT:
+{transcript}
+
+IMPORTANT: First assess if the transcript contains enough meaningful content to generate accurate metadata. If the transcript is too short, contains only silence markers, or lacks substantive content, return an error instead.
+
+REQUIREMENTS:
+- title: Maximum 80 characters, engaging and descriptive
+- keywords: Exactly 10 relevant keywords or short phrases (2-3 words max each)
+- summary: 2-3 sentences capturing the main points
+
+OUTPUT FORMAT:
+Return ONLY valid JSON in one of these formats (no markdown, no extra text):
+
+SUCCESS CASE (sufficient content):
+{
+  "title": "...",
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6", "keyword7", "keyword8", "keyword9", "keyword10"],
+  "summary": "..."
+}
+
+ERROR CASE (insufficient content):
+{
+  "error": "insufficient_content",
+  "message": "Brief explanation of why metadata cannot be generated"
+}
+

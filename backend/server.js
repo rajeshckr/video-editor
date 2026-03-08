@@ -11,6 +11,7 @@ const config = require('./config');
 const uploadRouter = require('./routes/upload');
 const renderRouter = require('./routes/render');
 const captionRouter = require('./routes/caption');
+const aiRouter = require('./routes/ai');
 const cleanupService = require('./services/cleanupService');
 const setupWhisper = require('./setupWhisper');
 
@@ -62,6 +63,7 @@ app.use((req, res, next) => {
 app.use('/api/upload', uploadRouter);
 app.use('/api/render', renderRouter);
 app.use('/api/caption', captionRouter);
+app.use('/api/ai', aiRouter);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

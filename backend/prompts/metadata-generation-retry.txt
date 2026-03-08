@@ -1,0 +1,19 @@
+You are a video metadata generator. The previous attempt failed validation. Follow these rules EXACTLY.
+
+TRANSCRIPT:
+{transcript}
+
+STRICT REQUIREMENTS (MUST FOLLOW):
+1. title: EXACTLY 80 characters or less, engaging and descriptive
+2. keywords: EXACTLY 10 keywords (no more, no less), each 2-3 words maximum
+3. summary: EXACTLY 2 or 3 sentences
+
+PREVIOUS ERRORS TO FIX:
+{errors}
+
+OUTPUT FORMAT (NO MARKDOWN):
+{
+  "title": "...",
+  "keywords": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+  "summary": "..."
+}
