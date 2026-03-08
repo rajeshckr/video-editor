@@ -2,8 +2,7 @@ import { useEditorStore } from '../store/editorStore';
 
 export default function Toolbar() {
   const {
-    cursorTime, setCursorTime, setExportPanelOpen,
-    setTextEditorOpen
+    cursorTime, setExportPanelOpen,
   } = useEditorStore();
 
   const formatTime = (s: number) => {

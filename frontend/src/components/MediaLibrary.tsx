@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import type { AssetMeta, Clip } from '../types';
-import { api } from '../utils/api';
 
 
 const API = 'http://localhost:3001';
@@ -14,7 +13,7 @@ export default function MediaLibrary() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState<Record<string, number>>({}); // fileName -> progress (0-100)
 
-  const uploadFile = (file: File) => {
+  const uploadFile = useCallback((file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     if (!ALLOWED.includes(ext)) { addSnackbar('error', `File type .${ext} not supported`); return; }
     
@@ -44,29 +43,41 @@ export default function MediaLibrary() {
           } else {
             addSnackbar('error', `Upload failed: ${data.error}`);
           }
-        } catch (e) {
+        } catch {
           addSnackbar('error', `Upload failed: Invalid response`);
         }
       } else {
         addSnackbar('error', `Upload failed: HTTP ${xhr.status}`);
       }
       // Remove from uploading
-      setUploading(prev => { const { [file.name]: _, ...rest } = prev; return rest; });
+      setUploading(prev => {
+        const next = { ...prev };
+        delete next[file.name];
+        return next;
+      });
     });
     
     xhr.addEventListener('error', () => {
       addSnackbar('error', `Upload error: ${file.name}`);
-      setUploading(prev => { const { [file.name]: _, ...rest } = prev; return rest; });
+      setUploading(prev => {
+        const next = { ...prev };
+        delete next[file.name];
+        return next;
+      });
     });
     
     xhr.addEventListener('abort', () => {
       addSnackbar('error', `Upload cancelled: ${file.name}`);
-      setUploading(prev => { const { [file.name]: _, ...rest } = prev; return rest; });
+      setUploading(prev => {
+        const next = { ...prev };
+        delete next[file.name];
+        return next;
+      });
     });
     
     xhr.open('POST', 'http://localhost:3001/api/upload');
     xhr.send(formData);
-  };
+  }, [addAsset, addSnackbar]);
 
   const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     Array.from(e.target.files || []).forEach(file => uploadFile(file));
@@ -79,7 +90,7 @@ export default function MediaLibrary() {
     dragCounter.current = 0;
     setIsDragging(false);
     Array.from(e.dataTransfer.files).forEach(file => uploadFile(file));
-  }, []);
+  }, [uploadFile]);
 
   const onDragOver = (e: React.DragEvent) => { 
     e.preventDefault();
@@ -158,7 +169,7 @@ export default function MediaLibrary() {
           >
             {/* Thumbnail or icon */}
             <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-editor-bg flex items-center justify-center">
-              <span className="text-xs text-[var(--editor-muted)]">⏳</span>
+              <span className="text-xs text-(--editor-muted)">⏳</span>
             </div>
             {/* Info */}
             <div className="flex-1 min-w-0">
@@ -206,7 +217,7 @@ export default function MediaLibrary() {
             draggable
             onDragStart={e => onAssetDragStart(e, asset)}
             onDragEnd={onAssetDragEnd}
-            className="flex items-center gap-2 p-2 rounded-md hover:bg-[var(--editor-panel2)] cursor-grab active:cursor-grabbing border border-transparent hover:border-editor-border transition-colors group"
+            className="flex items-center gap-2 p-2 rounded-md hover:bg-(--editor-panel2) cursor-grab active:cursor-grabbing border border-transparent hover:border-editor-border transition-colors group"
           >
             {/* Thumbnail or icon */}
             <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-editor-bg flex items-center justify-center">

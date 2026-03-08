@@ -20,7 +20,7 @@ export default function PropertiesPanel() {
     );
   }
 
-  const update = (field: string, value: any) => updateClip(selectedTrackId, selectedClip!.id, { [field]: value });
+  const update = (field: string, value: unknown) => updateClip(selectedTrackId, selectedClip!.id, { [field]: value });
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);

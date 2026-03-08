@@ -7,7 +7,6 @@ import { api } from '../utils/api';
 const logger = Logger.getInstance('Timeline');
 
 const TRACK_LABEL_W = 240;
-const TRACK_H = 52;
 const RULER_H = 28;
 
 export default function Timeline() {
@@ -165,7 +164,7 @@ export default function Timeline() {
 
   const handleSplit = () => {
     if (!selectedClipId) {
-      addSnackbar('Select a clip first', 'warning');
+      addSnackbar('info', 'Select a clip first');
       return;
     }
     for (const track of project.tracks) {
@@ -173,7 +172,7 @@ export default function Timeline() {
       if (clip) {
         const relativeTime = cursorTime - clip.timelinePosition;
         if (relativeTime <= 0 || relativeTime >= clip.timelineDuration) {
-          addSnackbar('Position playhead within the clip to split', 'warning');
+          addSnackbar('info', 'Position playhead within the clip to split');
           return;
         }
         splitClip(track.id, clip.id, cursorTime);

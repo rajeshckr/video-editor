@@ -322,7 +322,7 @@ export default function PreviewPlayer() {
           className={`p-1.5 rounded transition-colors ${
             project.orientation === 'landscape'
               ? 'bg-blue-600 text-white'
-              : 'bg-[var(--editor-bg)] text-editor-muted hover:bg-editor-border'
+              : 'bg-(--editor-bg) text-editor-muted hover:bg-editor-border'
           }`}
           onClick={() => setOrientation('landscape')}
           title="Landscape (16:9)"
@@ -335,7 +335,7 @@ export default function PreviewPlayer() {
           className={`p-1.5 rounded transition-colors ${
             project.orientation === 'portrait'
               ? 'bg-blue-600 text-white'
-              : 'bg-[var(--editor-bg)] text-editor-muted hover:bg-editor-border'
+              : 'bg-(--editor-bg) text-editor-muted hover:bg-editor-border'
           }`}
           onClick={() => setOrientation('portrait')}
           title="Portrait (9:16)"
