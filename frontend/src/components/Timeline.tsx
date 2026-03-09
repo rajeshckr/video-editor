@@ -22,8 +22,10 @@ export default function Timeline() {
   const [highlightedTrackId, setHighlightedTrackId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<{ type: 'playhead' | 'inpoint' | 'outpoint' | 'clip' | 'clipresize'; clipId?: string; trackId?: string; clipType?: string; edge?: 'left' | 'right'; startX: number; startTime: number; startDuration?: number; startSrc?: number; clipPos?: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, clip: Clip, trackId: string } | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
   const [draggedClipType, setDraggedClipType] = useState<string | null>(null);
   const [clipHoverTrackId, setClipHoverTrackId] = useState<string | null>(null);
@@ -62,6 +64,36 @@ export default function Timeline() {
 
     return () => resizeObserver.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      setContextMenuPos(null);
+      return;
+    }
+
+    const clampMenuPosition = () => {
+      const menuEl = contextMenuRef.current;
+      const menuWidth = menuEl?.offsetWidth ?? 160;
+      const menuHeight = menuEl?.offsetHeight ?? 120;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const edgePadding = 8;
+
+      const clampedLeft = Math.max(edgePadding, Math.min(contextMenu.x, viewportWidth - menuWidth - edgePadding));
+      const clampedTop = Math.max(edgePadding, Math.min(contextMenu.y, viewportHeight - menuHeight - edgePadding));
+
+      setContextMenuPos({ left: clampedLeft, top: clampedTop });
+    };
+
+    // Measure once after render so we can clamp based on actual menu height.
+    const rafId = window.requestAnimationFrame(clampMenuPosition);
+    window.addEventListener('resize', clampMenuPosition);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', clampMenuPosition);
+    };
+  }, [contextMenu]);
 
   // ── Ruler click ────────────────────────────────────────────────────────────
   const onRulerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -682,8 +714,12 @@ export default function Timeline() {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} onContextMenu={(e) => {e.preventDefault(); setContextMenu(null)}} />
           <div
+            ref={contextMenuRef}
             className="fixed z-50 bg-(--editor-panel2) border border-editor-border rounded-lg shadow-xl py-1 w-40 overflow-hidden"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
+            style={{
+              left: contextMenuPos?.left ?? contextMenu.x,
+              top: contextMenuPos?.top ?? contextMenu.y,
+            }}
           >
             <button
               className="w-full text-left px-3 py-1.5 text-xs text-editor-text hover:bg-red-600 hover:text-white transition-colors"
