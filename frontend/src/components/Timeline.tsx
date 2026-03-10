@@ -651,20 +651,23 @@ export default function Timeline() {
                   <div className="flex items-center gap-1 shrink-0 ml-1">
                     {track.type === 'caption' && (
                       <button
-                        className="btn p-0 w-8 h-8 flex items-center justify-center text-editor-text border border-editor-border rounded shadow-sm relative group"
-                        style={{ background: 'var(--editor-panel2)' }}
+                        className="btn p-0 w-10 h-10 flex items-center justify-center rounded-full border group"
+                        style={{
+                          background: '#fff',
+                          fontSize: '1.18rem',
+                          fontWeight: 600,
+                          fontFamily: 'Inter, Arial, sans-serif',
+                          letterSpacing: '0.5px',
+                          color: '#888',
+                          cursor: 'pointer',
+                          border: '1.5px solid #bbb',
+                        }}
                         title="Add Caption Clip"
                         aria-label="Add Caption Clip"
                         data-testid="add-caption-clip-btn"
                         onClick={() => handleAddCaptionClip(track.id)}
                       >
-                        <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          {/* Large, bold T */}
-                          <path d="M9 11 H23 V14 H17.5 V25 H14.5 V14 H9 V11 Z" fill="#222" />
-                          {/* Large, blue plus sign */}
-                          <path d="M26 5 v8 M22 9 h8" stroke="#2563eb" strokeWidth="2.8" strokeLinecap="round" />
-                        </svg>
-                        <span className="sr-only">Add Caption Clip</span>
+                        <span style={{color: '#888'}}>A+</span>
                       </button>
                     )}
                     {track.type !== 'audio' && (

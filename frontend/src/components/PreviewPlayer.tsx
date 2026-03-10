@@ -254,7 +254,10 @@ export default function PreviewPlayer() {
           vid.onloadeddata = () => drawOverlays(cursorTime, project);
         }
         const clipOffset = cursorTime - clip.timelinePosition + clip.srcStart;
-        if (Math.abs(vid.currentTime - clipOffset) > 0.1) vid.currentTime = clipOffset;
+        if (Math.abs(vid.currentTime - clipOffset) > 0.1) {
+          vid.currentTime = clipOffset;
+          vid.pause(); // Force preview update
+        }
       } else {
         vid.src = '';
       }
