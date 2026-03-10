@@ -9,6 +9,7 @@ const logger = Logger.getInstance('Server');
 
 const config = require('./config');
 const uploadRouter = require('./routes/upload');
+const progressRouter = require('./routes/progress');
 const renderRouter = require('./routes/render');
 const captionRouter = require('./routes/caption');
 const aiRouter = require('./routes/ai');
@@ -61,6 +62,7 @@ app.use((req, res, next) => {
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/upload', uploadRouter);
+app.use('/api/progress', progressRouter);
 app.use('/api/render', renderRouter);
 app.use('/api/caption', captionRouter);
 app.use('/api/ai', aiRouter);

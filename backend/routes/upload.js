@@ -3,10 +3,42 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const config = require('../config');
+const progressSSE = require('./progress');
+const transcriptService = require('../services/ai/transcriptService');
+const metadataService = require('../services/ai/metadataService');
 
 const router = express.Router();
+
+// ─── Upload request/response logging ─────────────────────────────────────────
+router.use((req, res, next) => {
+
+  const startTime = process.hrtime.bigint();
+  const requestDetails = {
+    method: req.method,
+    path: req.originalUrl,
+    contentType: req.get('content-type') || null,
+    contentLength: req.get('content-length') || null,
+  };
+
+  console.info('[upload][request]', requestDetails);
+
+  res.on('finish', () => {
+    const elapsedMs = Number(process.hrtime.bigint() - startTime) / 1e6;
+    console.info('[upload][response]', {
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Number(elapsedMs.toFixed(2)),
+      responseLength: res.getHeader('content-length') || null,
+      uploadedFile: req.file ? req.file.originalname : null,
+      uploadedSize: req.file ? req.file.size : null,
+    });
+  });
+
+  next();
+});
 
 // ─── Multer Storage ───────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
@@ -65,6 +97,13 @@ function generateThumbnail(filePath, outputPath, timeOffset = '00:00:01') {
 // ─── POST /api/upload ─────────────────────────────────────────────────────────
 router.post('/', upload.single('file'), async (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  console.info('[upload][file]', {
+    originalName: req.file.originalname,
+    storedName: req.file.filename,
+    mimeType: req.file.mimetype,
+    size: req.file.size,
+  });
 
   const fileId = path.basename(req.file.filename, path.extname(req.file.filename));
   const filePath = req.file.path;
@@ -131,11 +170,258 @@ router.post('/', upload.single('file'), async (req, res, next) => {
 
     res.json({ success: true, asset: metadata });
   } catch (err) {
+    console.error('[upload][error]', {
+      message: err?.message || 'Unknown upload error',
+      filename: req.file?.filename || null,
+    });
+
     // Clean up on error
     fs.unlink(filePath, () => {});
     next(err);
   }
 });
+
+// ─── Audio extraction helper ──────────────────────────────────────────────────
+function extractAudio(videoPath, audioPath) {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn(config.ffmpegPath, [
+      '-i', videoPath,
+      '-vn', // No video
+      '-acodec', 'libmp3lame',
+      '-ar', '16000',
+      '-ac', '1',
+      '-b:a', '64k',
+      '-y',
+      audioPath
+    ]);
+
+    let stderr = '';
+    ffmpeg.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        resolve(audioPath);
+      } else {
+        reject(new Error(`Audio extraction failed: ${stderr}`));
+      }
+    });
+
+    ffmpeg.on('error', reject);
+  });
+}
+
+// ─── POST /api/upload/process ─────────────────────────────────────────────────
+// Async processing endpoint with progress tracking
+router.post('/process', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const uploadId = uuidv4();
+  const fileId = path.basename(req.file.filename, path.extname(req.file.filename));
+  const filePath = req.file.path;
+  const ext = path.extname(req.file.originalname).toLowerCase().replace('.', '');
+  const isVideo = ['mp4','mov','mkv','webm'].includes(ext);
+
+  console.info('[upload][process]', {
+    uploadId,
+    originalName: req.file.originalname,
+    storedName: req.file.filename,
+    isVideo,
+  });
+
+  // Respond immediately with uploadId for SSE connection
+  res.json({ 
+    success: true, 
+    uploadId,
+    fileId,
+    message: 'Processing started. Connect to /api/progress/' + uploadId
+  });
+
+  // Start async processing
+  processVideo(uploadId, fileId, filePath, req.file, isVideo).catch(err => {
+    console.error('[upload][process-error]', { uploadId, error: err.message });
+    progressSSE.sendProgress(uploadId, {
+      type: 'error',
+      step: 'error',
+      message: err.message || 'Processing failed',
+      progress: 0
+    });
+    progressSSE.complete(uploadId);
+  });
+});
+
+// ─── Async video processing function ──────────────────────────────────────────
+async function processVideo(uploadId, fileId, filePath, fileInfo, isVideo) {
+  const startTime = Date.now();
+  let metadata = {
+    id: fileId,
+    originalName: fileInfo.originalname,
+    filename: fileInfo.filename,
+    filePath: filePath,
+    size: fileInfo.size,
+    type: isVideo ? 'video' : 'audio',
+    duration: 0,
+    width: 0,
+    height: 0,
+    fps: 30,
+    thumbnail: null,
+    transcript: null,
+    captions: null,
+    aiMetadata: null,
+  };
+
+  try {
+    // Stage 1: Extract media metadata (25%)
+    progressSSE.sendProgress(uploadId, {
+      type: 'progress',
+      step: 'extracting_audio',
+      stepLabel: 'Extracting Audio',
+      currentStep: 1,
+      totalSteps: 4,
+      progress: 5,
+      message: 'Analyzing video...'
+    });
+
+    const probe = await probeFile(filePath);
+    const format = probe.format || {};
+    metadata.duration = parseFloat(format.duration) || 0;
+    const videoStream = probe.streams?.find(s => s.codec_type === 'video');
+    
+    if (videoStream) {
+      metadata.width = videoStream.width || 0;
+      metadata.height = videoStream.height || 0;
+      const fpsStr = videoStream.r_frame_rate || '30/1';
+      const [num, den] = fpsStr.split('/').map(Number);
+      metadata.fps = den ? Math.round(num / den) : 30;
+    }
+
+    // Generate thumbnail
+    if (isVideo) {
+      const thumbPath = path.join(config.thumbnailsPath, `${fileId}.jpg`);
+      await generateThumbnail(filePath, thumbPath);
+      metadata.thumbnail = `/api/upload/thumbnail/${fileId}.jpg`;
+    }
+
+    progressSSE.sendProgress(uploadId, {
+      type: 'progress',
+      step: 'extracting_audio',
+      stepLabel: 'Extracting Audio',
+      currentStep: 1,
+      totalSteps: 4,
+      progress: 15,
+      message: 'Extracting audio from video...'
+    });
+
+    // Extract audio to MP3
+    const audioPath = path.join(config.tmpPath, 'intermediate', `${fileId}.mp3`);
+    await extractAudio(filePath, audioPath);
+    const audioSizeMB = (fs.statSync(audioPath).size / (1024 * 1024)).toFixed(2);
+
+    progressSSE.sendProgress(uploadId, {
+      type: 'progress',
+      step: 'extracting_audio',
+      stepLabel: 'Audio Extracted',
+      currentStep: 1,
+      totalSteps: 4,
+      progress: 25,
+      message: `Audio extracted: ${audioSizeMB} MB`,
+      complete: true
+    });
+
+    // Stage 2: Generate transcript (25-60%)
+    if (isVideo) {
+      progressSSE.sendProgress(uploadId, {
+        type: 'progress',
+        step: 'generating_transcript',
+        stepLabel: 'Generating Subtitles',
+        currentStep: 2,
+        totalSteps: 4,
+        progress: 30,
+        message: 'Starting Whisper AI transcription...'
+      });
+
+      // Copy to renders folder for transcript service
+      const renderPath = path.join(config.tmpPath, 'renders', fileInfo.filename);
+      fs.copyFileSync(filePath, renderPath);
+
+      const transcriptResult = await transcriptService.generateTranscript(fileInfo.filename);
+      metadata.transcript = transcriptResult.transcript;
+      metadata.captions = transcriptResult.captions;
+
+      progressSSE.sendProgress(uploadId, {
+        type: 'progress',
+        step: 'generating_transcript',
+        stepLabel: 'Subtitles Generated',
+        currentStep: 2,
+        totalSteps: 4,
+        progress: 60,
+        message: `${transcriptResult.captions.length} captions • ${Math.floor(metadata.duration / 60)}:${String(Math.floor(metadata.duration % 60)).padStart(2, '0')} transcribed`,
+        complete: true
+      });
+
+      // Stage 3: Generate metadata (60-90%)
+      progressSSE.sendProgress(uploadId, {
+        type: 'progress',
+        step: 'creating_metadata',
+        stepLabel: 'Creating Metadata',
+        currentStep: 3,
+        totalSteps: 4,
+        progress: 65,
+        message: 'Analyzing transcript for keywords and summary...'
+      });
+
+      const aiMetadata = await metadataService.generateMetadata(transcriptResult.transcript, false);
+      metadata.aiMetadata = aiMetadata;
+
+      progressSSE.sendProgress(uploadId, {
+        type: 'progress',
+        step: 'creating_metadata',
+        stepLabel: 'Metadata Created',
+        currentStep: 3,
+        totalSteps: 4,
+        progress: 90,
+        message: `Generated: ${aiMetadata.keywords?.length || 0} keywords`,
+        complete: true
+      });
+    }
+
+    // Stage 4: Finalize (90-100%)
+    progressSSE.sendProgress(uploadId, {
+      type: 'progress',
+      step: 'finalizing',
+      stepLabel: 'Finalizing',
+      currentStep: 4,
+      totalSteps: 4,
+      progress: 95,
+      message: 'Saving to media library...'
+    });
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    progressSSE.sendProgress(uploadId, {
+      type: 'complete',
+      step: 'finalizing',
+      stepLabel: 'Complete',
+      currentStep: 4,
+      totalSteps: 4,
+      progress: 100,
+      message: `Processing completed in ${elapsed}s`,
+      asset: metadata,
+      complete: true
+    });
+
+    progressSSE.complete(uploadId);
+
+  } catch (err) {
+    console.error('[upload][process-error]', { uploadId, error: err.message, stack: err.stack });
+    
+    // Clean up on error
+    fs.unlink(filePath, () => {});
+    
+    throw err;
+  }
+}
 
 // ─── GET /api/upload/thumbnail/:filename ─────────────────────────────────────
 router.get('/thumbnail/:filename', (req, res) => {
