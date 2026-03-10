@@ -239,7 +239,7 @@ export default function MediaLibrary() {
               title="Add to timeline"
               onClick={() => {
                 // Find first compatible track
-                const trackType = asset.type === 'audio' ? 'audio' : (asset.type === 'image' ? 'caption' : 'video');
+                const trackType = asset.type === 'audio' ? 'audio' : (asset.type === 'image' ? 'image' : 'video');
                 const track = project.tracks.find(t => t.type === trackType);
                 if (!track) { addSnackbar('error', `No ${trackType} track found. Add one from the toolbar.`); return; }
                 // Find first free position

@@ -6,6 +6,80 @@ import type { Clip, Track, AssetMeta, Project, SnackbarMessage } from '../types'
 
 const logger = Logger.getInstance('EditorStore');
 
+const canTrackAcceptClip = (trackType: Track['type'], clipType: Clip['type']): boolean => {
+  if (trackType === 'video') return clipType === 'video';
+  if (trackType === 'audio') return clipType === 'audio';
+  if (trackType === 'image') return clipType === 'image';
+  if (trackType === 'caption') return clipType === 'text';
+  return false;
+};
+
+const ensureDefaultTracks = (project: Project) => {
+  const requiredTypes: Track['type'][] = ['video', 'audio', 'image', 'caption'];
+  const maxTrackNumber = project.tracks.reduce((m, t) => Math.max(m, t.trackNumber), -1);
+  let nextTrackNumber = maxTrackNumber + 1;
+
+  requiredTypes.forEach((type) => {
+    const hasTrack = project.tracks.some(t => t.type === type);
+    if (hasTrack) return;
+
+    const count = project.tracks.filter(t => t.type === type).length + 1;
+    const label = `${type.charAt(0).toUpperCase() + type.slice(1)} ${count}`;
+
+    project.tracks.push({
+      id: uuidv4(),
+      type,
+      trackNumber: nextTrackNumber,
+      name: label,
+      muted: false,
+      visible: true,
+      clips: [],
+    });
+    nextTrackNumber += 1;
+  });
+};
+
+const migrateLegacyCaptionTracks = (project: Project) => {
+  const imageClipsToMove: Clip[] = [];
+
+  project.tracks.forEach(track => {
+    if (track.type !== 'caption') return;
+
+    const keepInCaption: Clip[] = [];
+    track.clips.forEach(clip => {
+      if (clip.type === 'image') {
+        imageClipsToMove.push(clip);
+        return;
+      }
+      keepInCaption.push(clip);
+    });
+    track.clips = keepInCaption;
+  });
+
+  if (imageClipsToMove.length === 0) return;
+
+  let imageTrack = project.tracks.find(t => t.type === 'image');
+  if (!imageTrack) {
+    const maxTrackNumber = project.tracks.reduce((m, t) => Math.max(m, t.trackNumber), -1);
+    imageTrack = {
+      id: uuidv4(),
+      type: 'image',
+      trackNumber: maxTrackNumber + 1,
+      name: `Image ${project.tracks.filter(t => t.type === 'image').length + 1}`,
+      muted: false,
+      visible: true,
+      clips: [],
+    };
+    project.tracks.push(imageTrack);
+  }
+
+  imageClipsToMove.forEach(clip => {
+    clip.trackId = imageTrack!.id;
+    clip.trackNumber = imageTrack!.trackNumber;
+    imageTrack!.clips.push(clip);
+  });
+};
+
 interface EditorState {
   project: Project;
   assets: AssetMeta[];
@@ -62,7 +136,8 @@ const DEFAULT_PROJECT: Project = {
   tracks: [
     { id: uuidv4(), type: 'video', trackNumber: 0, name: 'Video 1', muted: false, visible: true, clips: [] },
     { id: uuidv4(), type: 'audio', trackNumber: 1, name: 'Audio 1', muted: false, visible: true, clips: [] },
-    { id: uuidv4(), type: 'caption', trackNumber: 2, name: 'Text/Image 1', muted: false, visible: true, clips: [] },
+    { id: uuidv4(), type: 'image', trackNumber: 2, name: 'Image 1', muted: false, visible: true, clips: [] },
+    { id: uuidv4(), type: 'caption', trackNumber: 3, name: 'Caption 1', muted: false, visible: true, clips: [] },
   ],
   assets: [],
 };
@@ -146,6 +221,11 @@ export const useEditorStore = create<EditorState>()(
       const track = state.project.tracks.find(t => t.id === trackId);
       if (!track) {
         logger.error('Add clip to track failed:', new Error(`Track ${trackId} not found`));
+        return;
+      }
+
+      if (!canTrackAcceptClip(track.type, clipData.type)) {
+        logger.error('Add clip to track failed: incompatible clip/track types', new Error(`clipType=${clipData.type} trackType=${track.type}`));
         return;
       }
       
@@ -235,9 +315,16 @@ export const useEditorStore = create<EditorState>()(
       if (!fromTrack) return;
       const clipIdx = fromTrack.clips.findIndex(c => c.id === clipId);
       if (clipIdx === -1) return;
+
+      const clipToMove = fromTrack.clips[clipIdx];
+      const toTrack = state.project.tracks.find(t => t.id === toTrackId);
+      if (toTrackId !== fromTrackId && toTrack && !canTrackAcceptClip(toTrack.type, clipToMove.type)) {
+        logger.warn('Move clip blocked: incompatible track type', { clipType: clipToMove.type, toTrackType: toTrack.type });
+        return;
+      }
+
       const [clip] = fromTrack.clips.splice(clipIdx, 1);
       clip.timelinePosition = Math.max(0, newPosition);
-      const toTrack = state.project.tracks.find(t => t.id === toTrackId);
       if (toTrackId !== fromTrackId && toTrack) {
         clip.trackId = toTrackId;
         clip.trackNumber = toTrack.trackNumber;
@@ -404,6 +491,8 @@ export const useEditorStore = create<EditorState>()(
     },
 
     loadProject: (project, assets) => set(state => {
+      migrateLegacyCaptionTracks(project);
+      ensureDefaultTracks(project);
       logger.action('Load project', 'SUCCESS', { projectName: project.projectName, assetCount: assets.length, trackCount: project.tracks.length });
       state.project = project;
       state.assets = assets;

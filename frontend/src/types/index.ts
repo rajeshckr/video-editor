@@ -30,7 +30,7 @@ export interface Clip {
 
 export interface Track {
   id: string;
-  type: 'video' | 'audio' | 'caption';
+  type: 'video' | 'audio' | 'image' | 'caption';
   trackNumber: number;
   name: string;
   muted: boolean;

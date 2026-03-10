@@ -34,6 +34,8 @@ body {
   --clip-audio-border: #0891b2;
   --clip-image: #b45309;
   --clip-image-border: #d97706;
+  --clip-caption: #be185d;
+  --clip-caption-border: #db2777;
   --clip-text-bg: #92400e;
   --clip-text-border: #b45309;
   --clip-text-color: #ffffff; /* standard light text for dark mode media */
@@ -68,6 +70,8 @@ html[data-theme='light'] {
   --clip-audio-border: #bbf7d0;
   --clip-image: #fef9c3;
   --clip-image-border: #fef08a;
+  --clip-caption: #fce7f3;
+  --clip-caption-border: #fbcfe8;
   --clip-text-bg: #ffedd5;
   --clip-text-border: #fed7aa;
   --clip-text-color: #343A40
@@ -175,7 +179,8 @@ html[data-theme='light'] .btn-ghost:hover:not(:disabled) { background: rgba(0,0,
 /* Track colors */
 .track-video { border-left: 3px solid var(--clip-video); background: rgba(109, 40, 217, 0.12); }
 .track-audio { border-left: 3px solid var(--clip-audio); background: rgba(14, 116, 144, 0.12); }
-.track-caption { border-left: 3px solid var(--clip-image); background: rgba(180, 83, 9, 0.12); }
+.track-image { border-left: 3px solid var(--clip-image); background: rgba(180, 83, 9, 0.12); }
+.track-caption { border-left: 3px solid var(--clip-caption); background: rgba(190, 24, 93, 0.12); }
 
 /* Utility classes for custom variables */
 .border-boundary { border-color: var(--editor-border-boundary) !important; }

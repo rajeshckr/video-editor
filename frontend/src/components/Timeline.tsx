@@ -13,7 +13,7 @@ export default function Timeline() {
   const {
     project, cursorTime, setCursorTime, zoom, setZoom,
     setInPoint, setOutPoint, selectedClipId, setSelectedClip,
-    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack, assets,
+    updateClip, removeClip, removeTrack, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack, assets,
     draggedMediaType, splitClip, moveClip
   } = useEditorStore();
 
@@ -29,6 +29,8 @@ export default function Timeline() {
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
   const [draggedClipType, setDraggedClipType] = useState<string | null>(null);
   const [clipHoverTrackId, setClipHoverTrackId] = useState<string | null>(null);
+  const [isAddTrackMenuOpen, setIsAddTrackMenuOpen] = useState(false);
+  const addTrackMenuRef = useRef<HTMLDivElement>(null);
 
   const timeToX = (t: number) => t * zoom;
   const xToTime = useCallback((x: number) => Math.max(0, x / zoom), [zoom]);
@@ -94,6 +96,18 @@ export default function Timeline() {
       window.removeEventListener('resize', clampMenuPosition);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!addTrackMenuRef.current) return;
+      if (!addTrackMenuRef.current.contains(event.target as Node)) {
+        setIsAddTrackMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleOutsideClick);
+    return () => window.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
   // ── Ruler click ────────────────────────────────────────────────────────────
   const onRulerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -213,15 +227,15 @@ export default function Timeline() {
     }
   };
 
-  const handleAddTextClip = () => {
-    let captionTrack = project.tracks.find(t => t.type === 'caption');
-    if (!captionTrack) {
-      addTrack('caption');
-      captionTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'caption');
-    }
+  const handleAddTrackFromMenu = (trackKind: 'image' | 'caption' | 'video' | 'audio') => {
+    addTrack(trackKind);
+    setIsAddTrackMenuOpen(false);
+  };
 
+  const handleAddCaptionClip = (trackId: string) => {
+    const captionTrack = project.tracks.find(t => t.id === trackId && t.type === 'caption');
     if (!captionTrack) {
-      addSnackbar('error', 'Unable to create a Text/Image track.');
+      addSnackbar('error', 'Caption track not found.');
       return;
     }
 
@@ -230,7 +244,7 @@ export default function Timeline() {
     const clip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
       type: 'text',
       filePath: '',
-      originalName: 'Text: New Text',
+      originalName: 'Text: New Caption',
       srcStart: 0,
       srcEnd: 5,
       timelinePosition: cursorTime,
@@ -239,13 +253,12 @@ export default function Timeline() {
       opacity: 1,
       transform: { x: 0, y: 0, scale: 1, rotation: 0 },
       effects: [],
-      text: 'New Text',
+      text: 'New Caption',
       font: 'Inter',
-      fontSize: 48,
+      fontSize: 56,
       color: '#ffffff',
-      backgroundColor: '#000000',
       x: project.resolution.width / 2,
-      y: project.resolution.height / 2,
+      y: project.resolution.height * 0.85,
       animation: 'none',
     };
 
@@ -275,7 +288,8 @@ export default function Timeline() {
   const canAcceptMediaType = (mediaType: string, trackType: string): boolean => {
     if (mediaType === 'video') return trackType === 'video';
     if (mediaType === 'audio') return trackType === 'audio';
-    if (mediaType === 'image' || mediaType === 'text') return trackType === 'caption';
+    if (mediaType === 'image') return trackType === 'image';
+    if (mediaType === 'text') return trackType === 'caption';
     return false;
   };
 
@@ -290,7 +304,8 @@ export default function Timeline() {
 
     if (asset.type === 'video' && trackType !== 'video') { addSnackbar('error', 'Video clips must go on Video tracks.'); return; }
     if (asset.type === 'audio' && trackType !== 'audio') { addSnackbar('error', 'Audio clips must go on Audio tracks.'); return; }
-    if ((asset.type === 'image' || asset.type === 'text') && trackType !== 'caption') { addSnackbar('error', 'Images and Text must go on Text/Image tracks.'); return; }
+    if (asset.type === 'image' && trackType !== 'image') { addSnackbar('error', 'Image clips must go on Image tracks.'); return; }
+    if (asset.type === 'text' && trackType !== 'caption') { addSnackbar('error', 'Text clips must go on Caption tracks.'); return; }
     const rect = scrollRef.current!.getBoundingClientRect();
     const x = e.clientX - rect.left - TRACK_LABEL_W + scrollRef.current!.scrollLeft;
     const pos = Math.max(0, x / zoom);
@@ -337,7 +352,40 @@ export default function Timeline() {
     if (type === 'video') return { bg: 'var(--clip-video)', border: 'var(--clip-video-border)', text: 'var(--clip-text-color)' };
     if (type === 'audio') return { bg: 'var(--clip-audio)', border: 'var(--clip-audio-border)', text: 'var(--clip-text-color)' };
     if (type === 'image') return { bg: 'var(--clip-image)', border: 'var(--clip-image-border)', text: 'var(--clip-text-color)' };
-    return { bg: 'var(--clip-text-bg)', border: 'var(--clip-text-border)', text: 'var(--clip-text-color)' }; // text
+    return { bg: 'var(--clip-caption)', border: 'var(--clip-caption-border)', text: 'var(--clip-text-color)' }; // text/caption
+  };
+
+  const renderTrackTypeIcon = (trackType: string) => {
+    if (trackType === 'video') {
+      return (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      );
+    }
+
+    if (trackType === 'audio') {
+      return (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+        </svg>
+      );
+    }
+
+    if (trackType === 'image') {
+      return (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      );
+    }
+
+    return (
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16a2 2 0 012 2v7a2 2 0 01-2 2H9l-5 4v-4H4a2 2 0 01-2-2V8a2 2 0 012-2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h8M8 13h5" />
+      </svg>
+    );
   };
 
   // ── Auto-Captioning ────────────────────────────────────────────────────────
@@ -369,12 +417,12 @@ export default function Timeline() {
 
       logger.info(`Processing ${captions.length} captions for insertion`);
 
-      // Ensure we have a caption track for the captions
+      // Ensure we have a caption track for generated text clips
       let captionTrack = project.tracks.find(t => t.type === 'caption' && t.name === 'Captions');
       if (!captionTrack) {
         logger.info('Creating new Captions track');
         addTrack('caption');
-        const newTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'caption' && t.name.includes('Text/Image')); // Get the newly created one
+        const newTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'caption' && t.name.includes('Caption'));
         if (newTrack) {
           // Use the store method to safely update track name
           useEditorStore.getState().updateTrack(newTrack.id, { name: 'Captions' });
@@ -499,7 +547,11 @@ export default function Timeline() {
                 </div>
                 <div className="flex items-center gap-2 text-editor-text">
                   <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-image)', border: '1px solid var(--clip-image-border)' }}></div>
-                  <span>Text/Caption</span>
+                  <span>Image</span>
+                </div>
+                <div className="flex items-center gap-2 text-editor-text">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: 'var(--clip-caption)', border: '1px solid var(--clip-caption-border)' }}></div>
+                  <span>Caption</span>
                 </div>
               </div>
             </div>
@@ -513,28 +565,53 @@ export default function Timeline() {
             {/* Ruler corner */}
             <div style={{ height: RULER_H, borderBottom: '1px solid var(--editor-border-timeline)' }} className="flex items-center justify-between px-2 gap-1">
               <span className="text-[10px] text-editor-muted font-semibold flex-1">Tracks</span>
-              <div className="flex gap-0.5">
-                <button 
-                  className="btn btn-ghost p-0.5 text-editor-muted hover:text-editor-text" 
-                  onClick={() => addTrack('video')} 
-                  title="Add Video Track"
+              <div className="relative" ref={addTrackMenuRef}>
+                <button
+                  className="btn btn-ghost px-2 py-0.5 text-[11px] text-editor-muted hover:text-editor-text flex items-center gap-1"
+                  onClick={() => setIsAddTrackMenuOpen(v => !v)}
+                  title="Add Track"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                  <span>Add Track</span>
+                  <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 011.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  </svg>
                 </button>
-                <button 
-                  className="btn btn-ghost p-0.5 text-editor-muted hover:text-editor-text" 
-                  onClick={() => addTrack('audio')} 
-                  title="Add Audio Track"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
-                </button>
-                <button 
-                  className="btn btn-ghost p-0.5 text-editor-muted hover:text-editor-text" 
-                  onClick={handleAddTextClip}
-                  title="Add Text Clip"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                </button>
+
+                {isAddTrackMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-44 rounded-md border border-editor-border bg-editor-panel shadow-lg z-30 py-1">
+                    <button
+                      className="w-full px-2 py-1.5 text-left text-xs text-editor-text hover:bg-editor-bg flex items-center gap-2"
+                      onClick={() => handleAddTrackFromMenu('image')}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      <span>Add Image Track</span>
+                    </button>
+                    <button
+                      className="w-full px-2 py-1.5 text-left text-xs text-editor-text hover:bg-editor-bg flex items-center gap-2"
+                      onClick={() => handleAddTrackFromMenu('caption')}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16a2 2 0 012 2v7a2 2 0 01-2 2H9l-5 4v-4H4a2 2 0 01-2-2V8a2 2 0 012-2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h8M8 13h5" />
+                      </svg>
+                      <span>Add Caption Track</span>
+                    </button>
+                    <button
+                      className="w-full px-2 py-1.5 text-left text-xs text-editor-text hover:bg-editor-bg flex items-center gap-2"
+                      onClick={() => handleAddTrackFromMenu('video')}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      <span>Add Video Track</span>
+                    </button>
+                    <button
+                      className="w-full px-2 py-1.5 text-left text-xs text-editor-text hover:bg-editor-bg flex items-center gap-2"
+                      onClick={() => handleAddTrackFromMenu('audio')}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                      <span>Add Audio Track</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             {/* Track labels */}
@@ -564,22 +641,62 @@ export default function Timeline() {
                   }}
                   onDragEnd={() => setDraggedTrackId(null)}
                 >
-                  <div className="cursor-grab text-editor-muted px-1 opacity-60 hover:opacity-100 shrink-0" title="Drag to reorder track">
+                  <div className="cursor-grab text-editor-muted w-5 h-5 flex items-center justify-center opacity-60 hover:opacity-100 shrink-0" title="Drag to reorder track">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16"/></svg>
                   </div>
-                  <span className="text-xs text-track-title flex-1 truncate font-medium ml-1 select-none pointer-events-none">{track.name}</span>
-                  {track.type !== 'audio' && (
-                    <button className="btn btn-ghost p-0.5" title="Toggle visibility"
-                      onClick={() => useEditorStore.getState().toggleTrackVisible(track.id)}>
-                      {track.visible ? '👁' : '🚫'}
+                  <div className="w-5 h-5 shrink-0 text-editor-muted flex items-center justify-center" title={`${track.type.charAt(0).toUpperCase() + track.type.slice(1)} track`}>
+                    {renderTrackTypeIcon(track.type)}
+                  </div>
+                  <span className="text-xs text-track-title flex-1 min-w-0 truncate font-medium ml-1 select-none pointer-events-none">{track.name}</span>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    {track.type === 'caption' && (
+                      <button
+                        className="btn p-0 w-8 h-8 flex items-center justify-center text-editor-text border border-editor-border rounded shadow-sm relative group"
+                        style={{ background: 'var(--editor-panel2)' }}
+                        title="Add Caption Clip"
+                        aria-label="Add Caption Clip"
+                        data-testid="add-caption-clip-btn"
+                        onClick={() => handleAddCaptionClip(track.id)}
+                      >
+                        <svg className="w-7 h-7" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          {/* Large, bold T */}
+                          <path d="M9 11 H23 V14 H17.5 V25 H14.5 V14 H9 V11 Z" fill="#222" />
+                          {/* Large, blue plus sign */}
+                          <path d="M26 5 v8 M22 9 h8" stroke="#2563eb" strokeWidth="2.8" strokeLinecap="round" />
+                        </svg>
+                        <span className="sr-only">Add Caption Clip</span>
+                      </button>
+                    )}
+                    {track.type !== 'audio' && (
+                      <button className="btn btn-ghost p-0.5 w-5 h-5 flex items-center justify-center" title="Toggle visibility"
+                        onClick={() => useEditorStore.getState().toggleTrackVisible(track.id)}>
+                        {track.visible ? '👁' : '🚫'}
+                      </button>
+                    )}
+                    {(track.type === 'audio' || track.type === 'video') && (
+                      <button className="btn btn-ghost p-0.5 w-5 h-5 flex items-center justify-center" title="Mute"
+                        onClick={() => useEditorStore.getState().toggleTrackMute(track.id)}>
+                        {track.muted ? '🔇' : '🔊'}
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-ghost p-0.5 w-5 h-5 flex items-center justify-center text-editor-muted hover:text-red-400"
+                      title="Delete track"
+                      onClick={() => {
+                        if (track.clips.length > 0) {
+                          const confirmed = window.confirm(
+                            `Delete "${track.name}" and all ${track.clips.length} clip(s) on it? This cannot be undone.`
+                          );
+                          if (!confirmed) return;
+                        }
+                        removeTrack(track.id);
+                      }}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16" />
+                      </svg>
                     </button>
-                  )}
-                  {(track.type === 'audio' || track.type === 'video') && (
-                    <button className="btn btn-ghost p-0.5" title="Mute"
-                      onClick={() => useEditorStore.getState().toggleTrackMute(track.id)}>
-                      {track.muted ? '🔇' : '🔊'}
-                    </button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
