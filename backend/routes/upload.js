@@ -11,6 +11,14 @@ const metadataService = require('../services/ai/metadataService');
 
 const router = express.Router();
 
+//This file handles:
+// ─── POST /api/upload ─────────────────────────────────────────────────────────
+// ─── POST /api/upload/process ─────────────────────────────────────────────────
+// ─── GET /api/upload/thumbnail/:filename ─────────────────────────────────────
+// ─── GET /api/upload/file/:filename ──────────────────────────────────────────
+
+
+
 // ─── Upload request/response logging ─────────────────────────────────────────
 // router.use((req, res, next) => {
 
