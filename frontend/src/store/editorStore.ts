@@ -13,7 +13,6 @@ interface EditorState {
   playbackState: 'playing' | 'paused';
   selectedClipId: string | null;
   zoom: number; // pixels per second
-  textEditorOpen: boolean;
   exportPanelOpen: boolean;
   history: Project[];
   historyIndex: number;
@@ -43,7 +42,6 @@ interface EditorState {
   setZoom: (zoom: number) => void;
   toggleTrackMute: (trackId: string) => void;
   toggleTrackVisible: (trackId: string) => void;
-  setTextEditorOpen: (open: boolean) => void;
   setExportPanelOpen: (open: boolean) => void;
   setOrientation: (orientation: 'portrait' | 'landscape') => void;
   undo: () => void;
@@ -77,7 +75,6 @@ export const useEditorStore = create<EditorState>()(
     playbackState: 'paused',
     selectedClipId: null,
     zoom: 80,
-    textEditorOpen: false,
     exportPanelOpen: false,
     history: [],
     historyIndex: -1,
@@ -367,7 +364,6 @@ export const useEditorStore = create<EditorState>()(
       }
     }),
 
-    setTextEditorOpen: (open) => set(state => { state.textEditorOpen = open; }),
     setExportPanelOpen: (open) => set(state => { state.exportPanelOpen = open; }),
 
     setOrientation: (orientation) => set(state => {

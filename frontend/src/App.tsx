@@ -4,7 +4,6 @@ import Toolbar from './components/Toolbar';
 import MediaLibrary from './components/MediaLibrary';
 import PreviewPlayer from './components/PreviewPlayer';
 import Timeline from './components/Timeline';
-import TextClipEditor from './components/TextClipEditor';
 import ExportPanel from './components/ExportPanel';
 import SnackbarUI from './components/SnackbarUI';
 import PropertiesPanel from './components/PropertiesPanel';
@@ -31,7 +30,7 @@ const getMinTimelineHeight = (trackCount: number) =>
 
 export default function App() {
   const {
-    exportPanelOpen, textEditorOpen, setPlaybackState, playbackState, project
+    exportPanelOpen, setPlaybackState, playbackState, project
   } = useEditorStore();
 
   const [timelineHeight, setTimelineHeight] = useState(() => {
@@ -362,7 +361,6 @@ export default function App() {
       </div>
 
       {/* Modals */}
-      {textEditorOpen && <TextClipEditor />}
       {exportPanelOpen && <ExportPanel />}
       <SnackbarUI />
     </div>

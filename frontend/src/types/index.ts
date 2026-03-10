@@ -22,6 +22,7 @@ export interface Clip {
   font?: string;
   fontSize?: number;
   color?: string;
+  backgroundColor?: string;
   x?: number;
   y?: number;
   animation?: string;

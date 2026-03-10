@@ -12,33 +12,33 @@ const metadataService = require('../services/ai/metadataService');
 const router = express.Router();
 
 // ─── Upload request/response logging ─────────────────────────────────────────
-router.use((req, res, next) => {
+// router.use((req, res, next) => {
 
-  const startTime = process.hrtime.bigint();
-  const requestDetails = {
-    method: req.method,
-    path: req.originalUrl,
-    contentType: req.get('content-type') || null,
-    contentLength: req.get('content-length') || null,
-  };
+//   const startTime = process.hrtime.bigint();
+//   const requestDetails = {
+//     method: req.method,
+//     path: req.originalUrl,
+//     contentType: req.get('content-type') || null,
+//     contentLength: req.get('content-length') || null,
+//   };
 
-  console.info('[upload][request]', requestDetails);
+//   console.info('[upload][request]', requestDetails);
 
-  res.on('finish', () => {
-    const elapsedMs = Number(process.hrtime.bigint() - startTime) / 1e6;
-    console.info('[upload][response]', {
-      method: req.method,
-      path: req.originalUrl,
-      statusCode: res.statusCode,
-      durationMs: Number(elapsedMs.toFixed(2)),
-      responseLength: res.getHeader('content-length') || null,
-      uploadedFile: req.file ? req.file.originalname : null,
-      uploadedSize: req.file ? req.file.size : null,
-    });
-  });
+//   res.on('finish', () => {
+//     const elapsedMs = Number(process.hrtime.bigint() - startTime) / 1e6;
+//     console.info('[upload][response]', {
+//       method: req.method,
+//       path: req.originalUrl,
+//       statusCode: res.statusCode,
+//       durationMs: Number(elapsedMs.toFixed(2)),
+//       responseLength: res.getHeader('content-length') || null,
+//       uploadedFile: req.file ? req.file.originalname : null,
+//       uploadedSize: req.file ? req.file.size : null,
+//     });
+//   });
 
-  next();
-});
+//   next();
+// });
 
 // ─── Multer Storage ───────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
@@ -80,15 +80,25 @@ function probeFile(filePath) {
 }
 
 // ─── Thumbnail generation ─────────────────────────────────────────────────────
-function generateThumbnail(filePath, outputPath, timeOffset = '00:00:01') {
+function generateThumbnail(filePath, outputPath, options = {}) {
+  const { isImage = false, timeOffset = '00:00:01' } = options;
+  const ffArgs = isImage
+    ? [
+        '-i', filePath,
+        '-frames:v', '1',
+        '-vf', 'scale=200:-1',
+        '-y', outputPath
+      ]
+    : [
+        '-ss', timeOffset,
+        '-i', filePath,
+        '-frames:v', '1',
+        '-vf', 'scale=200:-1',
+        '-y', outputPath
+      ];
+
   return new Promise((resolve, reject) => {
-    execFile(config.ffmpegPath, [
-      '-ss', timeOffset,
-      '-i', filePath,
-      '-frames:v', '1',
-      '-vf', 'scale=200:-1',
-      '-y', outputPath
-    ], (err) => {
+    execFile(config.ffmpegPath, ffArgs, (err) => {
       if (err) reject(err); else resolve(outputPath);
     });
   });
@@ -156,16 +166,31 @@ router.post('/', upload.single('file'), async (req, res, next) => {
           metadata.width = imgStream.width || 0;
           metadata.height = imgStream.height || 0;
         }
-      } catch (_) {}
+      } catch (err) {
+        console.error('\x1b[31m[upload][warn] Image probe failed; continuing with default image metadata\x1b[0m', {
+          fileId,
+          originalName: req.file?.originalname || null,
+          storedName: req.file?.filename || null,
+          message: err?.message || 'Unknown image probe error',
+        });
+      }
     }
 
     // Generate thumbnail for video/image
     if (isVideo || isImage) {
       const thumbPath = path.join(config.thumbnailsPath, `${fileId}.jpg`);
       try {
-        await generateThumbnail(filePath, thumbPath);
+        await generateThumbnail(filePath, thumbPath, { isImage });
         metadata.thumbnail = `/api/upload/thumbnail/${fileId}.jpg`;
-      } catch (_) {}
+      } catch (err) {
+        console.error('\x1b[31m[upload][warn] Thumbnail generation failed\x1b[0m', {
+          fileId,
+          isImage,
+          originalName: req.file?.originalname || null,
+          storedName: req.file?.filename || null,
+          message: err?.message || 'Unknown thumbnail generation error',
+        });
+      }
     }
 
     res.json({ success: true, asset: metadata });
@@ -441,6 +466,22 @@ router.get('/file/:filename', (req, res) => {
   const absPath = path.resolve(filePath);
   if (!fs.existsSync(absPath)) return res.status(404).json({ error: 'Not found' });
 
+  const ext = path.extname(filename).toLowerCase();
+  const mimeByExt = {
+    '.mp4': 'video/mp4',
+    '.mov': 'video/quicktime',
+    '.mkv': 'video/x-matroska',
+    '.webm': 'video/webm',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.aac': 'audio/aac',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+  };
+  const contentType = mimeByExt[ext] || 'application/octet-stream';
+
   const stat = fs.statSync(absPath);
   const total = stat.size;
   const range = req.headers.range;
@@ -453,13 +494,13 @@ router.get('/file/:filename', (req, res) => {
       'Content-Range': `bytes ${start}-${end}/${total}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': end - start + 1,
-      'Content-Type': 'video/mp4',
+      'Content-Type': contentType,
     });
     fs.createReadStream(absPath, { start, end }).pipe(res);
   } else {
     res.writeHead(200, {
       'Content-Length': total,
-      'Content-Type': 'video/mp4',
+      'Content-Type': contentType,
       'Accept-Ranges': 'bytes',
     });
     fs.createReadStream(absPath).pipe(res);

@@ -13,7 +13,7 @@ export default function Timeline() {
   const {
     project, cursorTime, setCursorTime, zoom, setZoom,
     setInPoint, setOutPoint, selectedClipId, setSelectedClip,
-    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack, assets, setTextEditorOpen,
+    updateClip, removeClip, addClipToTrack, addSnackbar, extractAudioFromVideo, addTrack, assets,
     draggedMediaType, splitClip, moveClip
   } = useEditorStore();
 
@@ -210,6 +210,51 @@ export default function Timeline() {
         splitClip(track.id, clip.id, cursorTime);
         break;
       }
+    }
+  };
+
+  const handleAddTextClip = () => {
+    let captionTrack = project.tracks.find(t => t.type === 'caption');
+    if (!captionTrack) {
+      addTrack('caption');
+      captionTrack = useEditorStore.getState().project.tracks.find(t => t.type === 'caption');
+    }
+
+    if (!captionTrack) {
+      addSnackbar('error', 'Unable to create a Text/Image track.');
+      return;
+    }
+
+    const existingIds = new Set(captionTrack.clips.map(c => c.id));
+
+    const clip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
+      type: 'text',
+      filePath: '',
+      originalName: 'Text: New Text',
+      srcStart: 0,
+      srcEnd: 5,
+      timelinePosition: cursorTime,
+      timelineDuration: 5,
+      volume: 1,
+      opacity: 1,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      effects: [],
+      text: 'New Text',
+      font: 'Inter',
+      fontSize: 48,
+      color: '#ffffff',
+      backgroundColor: '#000000',
+      x: project.resolution.width / 2,
+      y: project.resolution.height / 2,
+      animation: 'none',
+    };
+
+    addClipToTrack(captionTrack.id, clip);
+
+    const updatedTrack = useEditorStore.getState().project.tracks.find(t => t.id === captionTrack.id);
+    const newClip = updatedTrack?.clips.find(c => !existingIds.has(c.id));
+    if (newClip) {
+      setSelectedClip(newClip.id);
     }
   };
 
@@ -485,8 +530,8 @@ export default function Timeline() {
                 </button>
                 <button 
                   className="btn btn-ghost p-0.5 text-editor-muted hover:text-editor-text" 
-                  onClick={() => setTextEditorOpen(true)} 
-                  title="Add Text/Image Track"
+                  onClick={handleAddTextClip}
+                  title="Add Text Clip"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 </button>

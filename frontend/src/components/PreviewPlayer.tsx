@@ -153,8 +153,10 @@ export default function PreviewPlayer() {
               const scaleToFit = Math.min(canvas.width / (img.naturalWidth || 1), canvas.height / (img.naturalHeight || 1));
               const iw = img.naturalWidth * scaleToFit * tr.scale;
               const ih = img.naturalHeight * scaleToFit * tr.scale;
-              const cx = canvas.width / 2 + tr.x;
-              const cy = canvas.height / 2 + tr.y;
+              const baseX = clip.x !== undefined ? (clip.x / W) * canvas.width : canvas.width / 2;
+              const baseY = clip.y !== undefined ? (clip.y / H) * canvas.height : canvas.height / 2;
+              const cx = baseX + tr.x;
+              const cy = baseY + tr.y;
 
               ctx.translate(cx, cy);
               ctx.rotate(tr.rotation * Math.PI / 180);
@@ -166,16 +168,69 @@ export default function PreviewPlayer() {
 
         if (clip.type === 'text') {
           ctx.save();
-          ctx.globalAlpha = clip.opacity ?? 1;
+          const tr = clip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
+          const clipDuration = Math.max(0.001, clip.timelineDuration || 0);
+          const localT = Math.max(0, t - clip.timelinePosition);
+          const inDuration = Math.min(0.35, clipDuration / 2);
+          const outStart = Math.max(inDuration, clipDuration - inDuration);
+
+          let animAlpha = 1;
+          let animOffsetX = 0;
+          let animScale = 1;
+
+          if (clip.animation === 'fade' && inDuration > 0) {
+            if (localT < inDuration) animAlpha = localT / inDuration;
+            else if (localT > outStart) animAlpha = (clipDuration - localT) / inDuration;
+          }
+
+          if (clip.animation === 'slide-left' && inDuration > 0) {
+            const p = Math.min(1, localT / inDuration);
+            animOffsetX = (1 - p) * -80;
+          }
+
+          if (clip.animation === 'slide-right' && inDuration > 0) {
+            const p = Math.min(1, localT / inDuration);
+            animOffsetX = (1 - p) * 80;
+          }
+
+          if (clip.animation === 'zoom' && inDuration > 0) {
+            const p = Math.min(1, localT / inDuration);
+            animScale = 0.7 + (0.3 * p);
+          }
+
+          ctx.globalAlpha = (clip.opacity ?? 1) * Math.max(0, Math.min(1, animAlpha));
           ctx.fillStyle = clip.color || '#ffffff';
-          ctx.font = `${clip.fontSize || 48}px "${clip.font || 'Inter'}", sans-serif`;
+          const effectiveFontSize = (clip.fontSize || 48) * (tr.scale || 1) * animScale;
+          ctx.font = `${Math.max(1, effectiveFontSize)}px "${clip.font || 'Inter'}", sans-serif`;
           ctx.textAlign = 'center';
-          const x = clip.x !== undefined ? (clip.x / W) * canvas.width : canvas.width / 2;
-          const y = clip.y !== undefined ? (clip.y / H) * canvas.height : canvas.height / 2;
+          ctx.textBaseline = 'middle';
+          const baseX = clip.x !== undefined ? (clip.x / W) * canvas.width : canvas.width / 2;
+          const baseY = clip.y !== undefined ? (clip.y / H) * canvas.height : canvas.height / 2;
+          const x = baseX + tr.x + animOffsetX;
+          const y = baseY + tr.y;
           // Text shadow for readability
           ctx.shadowColor = 'rgba(0,0,0,0.8)';
           ctx.shadowBlur = 4;
-          ctx.fillText(clip.text || '', x, y);
+          ctx.translate(x, y);
+          ctx.rotate((tr.rotation || 0) * Math.PI / 180);
+
+          if (clip.backgroundColor) {
+            const metrics = ctx.measureText(clip.text || '');
+            const textWidth = metrics.width;
+            const textHeight = Math.max(1, effectiveFontSize * 1.2);
+            const padX = Math.max(6, effectiveFontSize * 0.2);
+            const padY = Math.max(3, effectiveFontSize * 0.12);
+            ctx.fillStyle = clip.backgroundColor;
+            ctx.fillRect(
+              -(textWidth / 2) - padX,
+              -(textHeight / 2) - padY,
+              textWidth + (padX * 2),
+              textHeight + (padY * 2)
+            );
+            ctx.fillStyle = clip.color || '#ffffff';
+          }
+
+          ctx.fillText(clip.text || '', 0, 0);
           ctx.restore();
         }
       }

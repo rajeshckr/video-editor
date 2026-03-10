@@ -88,6 +88,46 @@ function toFfmpegFilterPath(filePath) {
   return path.resolve(filePath).replace(/\\/g, '/').replace(/'/g, "\\'");
 }
 
+function resolveFontOption(fontName) {
+  const fontMap = {
+    'Inter': 'arial.ttf',
+    'Arial': 'arial.ttf',
+    'Georgia': 'georgia.ttf',
+    'Courier New': 'cour.ttf',
+    'Impact': 'impact.ttf',
+    'Trebuchet MS': 'trebuc.ttf',
+    'Verdana': 'verdana.ttf'
+  };
+
+  const windowsFontDir = path.join(process.env.WINDIR || 'C:/Windows', 'Fonts');
+  const filename = fontMap[fontName];
+  if (filename) {
+    const candidate = path.join(windowsFontDir, filename);
+    if (fs.existsSync(candidate)) {
+      const escapedPath = candidate.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
+      return `fontfile='${escapedPath}'`;
+    }
+  }
+
+  const safeFont = String(fontName || 'Arial').replace(/'/g, "\\'");
+  return `font='${safeFont}'`;
+}
+
+function normalizeBgColor(color, opacityMultiplier = 1) {
+  if (!color || color === 'transparent') return null;
+  const op = Math.min(1, Math.max(0, Number(opacityMultiplier) || 0));
+  const hex = String(color).trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return `0x${hex.slice(1)}@${(0.55 * op).toFixed(2)}`;
+  }
+  if (/^#[0-9a-fA-F]{8}$/.test(hex)) {
+    const rgb = hex.slice(1, 7);
+    const alpha = (parseInt(hex.slice(7, 9), 16) / 255) * op;
+    return `0x${rgb}@${alpha.toFixed(2)}`;
+  }
+  return hex;
+}
+
 // ============================================================================
 // MAIN RENDER ENTRY POINT
 // ============================================================================
@@ -534,18 +574,21 @@ async function renderBaseVideo({ videoClips, imageClips, inPoint, duration, W, H
     const label = `img${idx}`;
     const overlayLabel = `imgov${idx}`;
     const opacity = clip.opacity !== undefined ? clip.opacity : 1;
+    const tr = clip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
+    const posX = clip.x !== undefined ? (clip.x + (tr.x || 0)) : ((W / 2) + (tr.x || 0));
+    const posY = clip.y !== undefined ? (clip.y + (tr.y || 0)) : ((H / 2) + (tr.y || 0));
+    const scale = Math.max(0.1, Number(tr.scale || 1));
 
-    // Build filter for image: scale, pad, add alpha channel, apply opacity
-    const scalePad = buildScalePadFilter(W, H, true);  // true = include alpha channel
+    // Build filter for image: fit to canvas, apply clip zoom, then opacity.
     filterParts.push(
-      `[${idx}:v]${scalePad},colorchannelmixer=aa=${opacity}[${label}]`
+      `[${idx}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,format=rgba,scale=iw*${scale}:ih*${scale},colorchannelmixer=aa=${opacity}[${label}]`
     );
 
     const comma = "\\\,";
     
-    // Overlay image at its timeline position
+    // Overlay image at its timeline position (anchor at center like text).
     filterParts.push(
-      `[${currentVideo}][${label}]overlay=enable=between(t${comma}${timing.relStart}${comma}${timing.relEnd}):x=0:y=0[${overlayLabel}]`
+      `[${currentVideo}][${label}]overlay=enable=between(t${comma}${timing.relStart}${comma}${timing.relEnd}):x=(${posX.toFixed(3)})-(overlay_w/2):y=(${posY.toFixed(3)})-(overlay_h/2)[${overlayLabel}]`
     );
     
     currentVideo = overlayLabel;
@@ -554,7 +597,10 @@ async function renderBaseVideo({ videoClips, imageClips, inPoint, duration, W, H
       file: path.basename(clip.filePath),
       relStart: timing.relStart, 
       relEnd: timing.relEnd,
-      opacity
+      opacity,
+      scale,
+      posX,
+      posY
     });
   }
 
@@ -708,16 +754,48 @@ async function renderTextOverlay({ textClips, inPoint, duration, W, H, fps, outp
         const relativeTextPath = path.relative(process.cwd(), textFilePath).replace(/\\/g, '/').replace(/'/g, "\\'");
 
         const fontColor = (clip.color || '#ffffff').replace('#', '0x');  // FFmpeg uses 0x prefix
-        const fontSize = clip.fontSize || 48;
-        
-        // Position: default to center if not specified
-        const x = clip.x !== undefined ? clip.x : '(w-text_w)/2';
-        const y = clip.y !== undefined ? clip.y : '(h-text_h)/2';
+        const tr = clip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
+        const clipOpacity = Math.min(1, Math.max(0, clip.opacity ?? 1));
+        const baseFontSize = Math.max(1, Math.round((clip.fontSize || 48) * (tr.scale || 1)));
+        const fontOption = resolveFontOption(clip.font || 'Arial');
+        const boxColor = normalizeBgColor(clip.backgroundColor, clipOpacity);
+        const animation = clip.animation || 'none';
 
-        // Build drawtext filter from file path instead of inline text to avoid CLI escaping issues
+        // X/Y represent where the text anchor (center) should be on canvas.
+        // drawtext x/y is top-left, so subtract half text dimensions.
+        const posX = clip.x !== undefined ? (clip.x + (tr.x || 0)) : ((W / 2) + (tr.x || 0));
+        const posY = clip.y !== undefined ? (clip.y + (tr.y || 0)) : ((H / 2) + (tr.y || 0));
+        const xBase = `(${posX.toFixed(3)})-(text_w/2)`;
+        const y = `(${posY.toFixed(3)})-(text_h/2)`;
+
+        const animDur = Math.min(0.35, Math.max(0.12, timing.clipDuration / 2));
+        const fadeOutStart = Math.max(timing.relStart + animDur, timing.relEnd - animDur);
         const comma = "\\\,";
 
-        const filterPartString = `[${currentVideo}]drawtext=textfile=${relativeTextPath}:fontsize=${fontSize}:fontcolor=${fontColor}:x=${x}:y=${y}:enable=between(t${comma}${timing.relStart}${comma}${timing.relEnd})[${textLabel}]`;
+        let x = `${xBase}`;
+        let fontSizeExpr = `${baseFontSize}`;
+        let alphaExpr = '1';
+
+        if (animation === 'fade') {
+          alphaExpr = `if(lt(t${comma}${timing.relStart.toFixed(3)})${comma}0${comma}if(lt(t${comma}${(timing.relStart + animDur).toFixed(3)})${comma}(t-${timing.relStart.toFixed(3)})/${animDur.toFixed(3)}${comma}if(lt(t${comma}${fadeOutStart.toFixed(3)})${comma}1${comma}if(lt(t${comma}${timing.relEnd.toFixed(3)})${comma}(${timing.relEnd.toFixed(3)}-t)/${animDur.toFixed(3)}${comma}0))))`;
+        }
+
+        if (animation === 'slide-left') {
+          x = `(${xBase})+if(lt(t${comma}${(timing.relStart + animDur).toFixed(3)})${comma}(-80)*(1-((t-${timing.relStart.toFixed(3)})/${animDur.toFixed(3)}))${comma}0)`;
+        }
+
+        if (animation === 'slide-right') {
+          x = `(${xBase})+if(lt(t${comma}${(timing.relStart + animDur).toFixed(3)})${comma}(80)*(1-((t-${timing.relStart.toFixed(3)})/${animDur.toFixed(3)}))${comma}0)`;
+        }
+
+        if (animation === 'zoom') {
+          fontSizeExpr = `${baseFontSize}*(0.7+0.3*if(lt(t${comma}${(timing.relStart + animDur).toFixed(3)})${comma}(t-${timing.relStart.toFixed(3)})/${animDur.toFixed(3)}${comma}1))`;
+        }
+
+        alphaExpr = `(${alphaExpr})*${clipOpacity.toFixed(3)}`;
+
+        const boxPart = boxColor ? `:box=1:boxcolor=${boxColor}:boxborderw=10` : '';
+        const filterPartString = `[${currentVideo}]drawtext=textfile=${relativeTextPath}:${fontOption}:fontsize=${fontSizeExpr}:fontcolor=${fontColor}:x=${x}:y=${y}:alpha=${alphaExpr}${boxPart}:enable=between(t${comma}${timing.relStart}${comma}${timing.relEnd})[${textLabel}]`;
 
         filterParts.push(
           filterPartString
