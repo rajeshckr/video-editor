@@ -639,6 +639,7 @@ async function renderBaseVideo({ videoClips, imageClips, inPoint, duration, W, H
       relEnd: timing.relEnd,
       opacity,
       scale,
+      rotationDeg: Number(tr.rotation || 0),
       posX,
       posY
     });
