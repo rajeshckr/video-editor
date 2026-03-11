@@ -19,6 +19,8 @@ export async function extractLocalMetadata(file: File): Promise<{
 
     const localUrl = URL.createObjectURL(file);
 
+    let timeoutId: any;
+
     if (type === 'video') {
       const video = document.createElement('video');
       video.playsInline = true;
@@ -52,10 +54,11 @@ export async function extractLocalMetadata(file: File): Promise<{
 
       const onError = () => {
         cleanup();
-        reject(new Error('Failed to load video metadata'));
+        resolve({ duration: 5, width: 1920, height: 1080, fps: 30, type });
       };
 
       const cleanup = () => {
+        clearTimeout(timeoutId);
         video.removeEventListener('loadedmetadata', onMetadataLoaded);
         video.removeEventListener('seeked', onSeeked);
         video.removeEventListener('error', onError);
@@ -67,6 +70,12 @@ export async function extractLocalMetadata(file: File): Promise<{
       video.addEventListener('seeked', onSeeked);
       video.addEventListener('error', onError);
       video.src = localUrl;
+      video.load();
+
+      timeoutId = setTimeout(() => {
+        cleanup();
+        resolve({ duration: 5, width: 1920, height: 1080, fps: 30, type });
+      }, 3000);
     } else if (type === 'audio') {
       const audio = document.createElement('audio');
       
@@ -119,10 +128,11 @@ export async function extractLocalMetadata(file: File): Promise<{
 
       const onError = () => {
         cleanup();
-        reject(new Error('Failed to load image metadata'));
+        resolve({ duration: 5, width: 1920, height: 1080, fps: 0, type });
       };
 
       const cleanup = () => {
+        clearTimeout(timeoutId);
         img.removeEventListener('load', onLoad);
         img.removeEventListener('error', onError);
         URL.revokeObjectURL(localUrl);
@@ -132,6 +142,11 @@ export async function extractLocalMetadata(file: File): Promise<{
       img.addEventListener('load', onLoad);
       img.addEventListener('error', onError);
       img.src = localUrl;
+
+      timeoutId = setTimeout(() => {
+        cleanup();
+        resolve({ duration: 5, width: 1920, height: 1080, fps: 0, type });
+      }, 3000);
     }
   });
 }

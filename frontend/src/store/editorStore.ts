@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 import Logger from '../utils/logger';
 import type { Clip, Track, AssetMeta, Project, SnackbarMessage } from '../types';
 import { extractAudioLocally } from '../utils/ffmpegWasmUtils';
-import { api } from '../utils/api';
 
 const logger = Logger.getInstance('EditorStore');
 
@@ -394,89 +393,153 @@ export const useEditorStore = create<EditorState>()(
 
     extractAudioFromVideo: async (trackId, clipId) => {
       const state = get();
+      console.log('[extractAudioFromVideo] called with trackId:', trackId, 'clipId:', clipId);
       const vTrack = state.project.tracks.find(t => t.id === trackId);
-      if (!vTrack) return;
+      if (!vTrack) {
+        console.error('[extractAudioFromVideo] No video track found for trackId:', trackId);
+        return;
+      }
       const vClip = vTrack.clips.find(c => c.id === clipId);
       if (!vClip || vClip.type !== 'video') {
         logger.error('Extract audio failed: not a video clip', new Error(`clipId: ${clipId}`));
         return;
       }
 
-      state.addSnackbar('info', 'Extracting audio (WASM FFmpeg)... This may take a moment.');
+      state.addSnackbar('info', 'Extracting audio... This may take a moment.');
 
       // Obtain the file blob (prefer localFile, then localUrl, then server fallback)
       let videoBlob: Blob | File | undefined = vClip.localFile;
       if (!videoBlob && vClip.localUrl) {
-        try { videoBlob = await (await fetch(vClip.localUrl)).blob(); } catch (e) { /* ignore */ }
+        try {
+          logger.debug('[extractAudioFromVideo]  Fetching videoBlob from localUrl:', vClip.localUrl);
+          videoBlob = await (await fetch(vClip.localUrl)).blob();
+        } catch (e) {
+          logger.error('[extractAudioFromVideo] Failed to fetch from localUrl:', e);
+        }
       }
       if (!videoBlob) {
-        try { videoBlob = await (await fetch(`http://localhost:3001/api/upload/file/${vClip.filePath.split(/[\\/]/).pop()}`)).blob(); } catch(e) { /* ignore */ }
+        try {
+          const fileName = vClip.filePath.split(/[\\/]/).pop();
+          const url = `http://localhost:3001/api/upload/file/${fileName}`;
+          console.log('[extractAudioFromVideo] Fetching videoBlob from server:', url);
+          videoBlob = await (await fetch(url)).blob();
+        } catch(e) {
+          console.error('[extractAudioFromVideo] Failed to fetch videoBlob from server:', e);
+        }
       }
       
       if (!videoBlob) {
+        console.error('[extractAudioFromVideo] Failed to retrieve video data for extraction.');
         state.addSnackbar('error', 'Failed to retrieve video data for extraction.');
         return;
       }
 
       try {
+        console.log('[extractAudioFromVideo] Calling extractAudioLocally...');
         const audioFile = await extractAudioLocally(videoBlob, vClip.originalName);
-        
-        // Upload audio file
-        const formData = new FormData();
-        formData.append('file', audioFile);
-        
-        const res = await api.post('/api/upload', formData);
-        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-        
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error);
 
-        const newAsset: AssetMeta = {
-          ...data.asset,
-          localUrl: URL.createObjectURL(audioFile),
-          localFile: audioFile
+        // Extract metadata for the audio file
+        let meta;
+        try {
+          // Dynamically import to avoid circular dependency
+          meta = (await import('../utils/mediaUtils')).extractLocalMetadata;
+          meta = await meta(audioFile);
+          logger.debug('[extractAudioFromVideo] Extracted metadata for audio file:', meta);
+        } catch (err) {
+          logger.error('Failed to extract metadata from audio file, using defaults', err);
+          meta = { duration: 0, width: 0, height: 0, fps: 0, type: 'audio', thumbnailUrl: undefined };
+        }
+
+        // Create AssetMeta for the extracted audio with real metadata
+        const assetId = uuidv4();
+        const localUrl = URL.createObjectURL(audioFile);
+        const asset: AssetMeta = {
+          id: assetId,
+          originalName: audioFile.name,
+          filename: audioFile.name,
+          filePath: '', // Will be set after upload
+          localUrl,
+          localFile: audioFile,
+          size: audioFile.size,
+          type: 'audio',
+          duration: meta.duration,
+          width: meta.width,
+          height: meta.height,
+          fps: meta.fps,
+          uploadStatus: 'uploading',
+          thumbnail: meta.thumbnailUrl
         };
 
-        // Mutate store to add asset, update clips, create tracks
+        logger.info('Audio extraction - new asset (pending upload):', asset);
         set(draft => {
-          draft.assets.push(newAsset);
-          
+          draft.assets.push(asset);
+        });
+
+        // Dispatch a custom event so MediaLibrary can pick up and upload this asset
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('media-library-upload', { detail: { asset, file: audioFile } }));
+        }, 0);
+
+        // Add extracted audio as a clip to the first audio track (or create one)
+        set(draft => {
+          // Mute the original video clip
           const draftVTrack = draft.project.tracks.find(t => t.id === trackId);
           const draftVClip = draftVTrack?.clips.find(c => c.id === clipId);
-          if (draftVClip) draftVClip.volume = 0; // mute the original video
-          
+          // if (draftVClip) {
+          //     draftVClip.volume = 0;
+          // }
+
+          // Find or create an audio track
           let aTrack = draft.project.tracks.find(t => t.type === 'audio');
           if (!aTrack) {
             const maxNum = draft.project.tracks.reduce((m, t) => Math.max(m, t.trackNumber), -1);
             aTrack = {
-              id: uuidv4(), type: 'audio', trackNumber: maxNum + 1,
+              id: uuidv4(),
+              type: 'audio',
+              trackNumber: maxNum + 1,
               name: `Audio ${draft.project.tracks.filter(t => t.type === 'audio').length + 1}`,
-              muted: false, visible: true, clips: []
+              muted: false,
+              visible: true,
+              clips: []
             };
             draft.project.tracks.push(aTrack);
             logger.action(`Create audio track for extraction`, 'SUCCESS', { trackName: aTrack.name });
+            console.log('[extractAudioFromVideo] Created new audio track:', aTrack);
           }
 
+          // Add the audio clip to the audio track
           const aClip: Clip = {
-            ...JSON.parse(JSON.stringify(vClip)), // copy timeline position, src offsets, duration, transforms etc
             id: uuidv4(),
             trackId: aTrack.id,
             trackNumber: aTrack.trackNumber,
             type: 'audio',
-            volume: 1, // Reset volume to 1
-            filePath: newAsset.filePath,
-            localUrl: newAsset.localUrl,
-            localFile: newAsset.localFile,
-            originalName: newAsset.originalName,
+            originalName: audioFile.name,
+            filePath: '', // Will be set after upload
+            localUrl: localUrl,
+            localFile: audioFile,
+            timelinePosition: draftVClip ? draftVClip.timelinePosition : 0,
+            timelineDuration: draftVClip ? draftVClip.timelineDuration ?? 0 : 0,
+            srcStart: 0,
+            srcEnd: 0,
+            volume: 1,
+            opacity: 1,
+            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            effects: [],
+            thumbnail: undefined,
+            width: 0,
+            height: 0,
+            fps: 0,
           };
           aTrack.clips.push(aClip);
+          logger.info('Audio extraction - new audio clip added to audio track:', aClip);
 
+          // Update outPoint if not manually set
           if (!draft.outPointManuallySet) {
             const allClips = draft.project.tracks.flatMap(t => t.clips);
-            draft.project.outPoint = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+            draft.project.outPoint = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + (c.timelineDuration || 0)), 0);
           }
         });
-        
+
         get().addSnackbar('success', 'Audio extracted successfully.');
       } catch (err: any) {
         logger.error('Extraction failed', err);

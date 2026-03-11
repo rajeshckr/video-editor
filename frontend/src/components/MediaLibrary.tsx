@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useEditorStore } from '../store/editorStore';
 import type { AssetMeta, Clip } from '../types';
 import { extractLocalMetadata } from '../utils/mediaUtils';
+import { useEffect } from 'react';
 
 const API = 'http://localhost:3001';
 const ALLOWED = ['mp4','mov','mkv','webm','mp3','wav','aac','jpg','jpeg','png','webp'];
@@ -15,6 +16,14 @@ export default function MediaLibrary() {
   const [uploading, setUploading] = useState<Record<string, number>>({}); // assetId -> progress (0-100)
 
   const doUpload = useCallback((asset: AssetMeta, file: File) => {
+
+    //log using loggedr asset and file summary (without file content) for debugging upload issues
+    console.log('[doUpload] Upload triggered for asset', {
+      asset: asset,
+      file: file
+    } );
+    
+
     setUploading(prev => ({ ...prev, [asset.id]: 0 }));
     updateAsset(asset.id, { uploadStatus: 'uploading' });
     
@@ -39,7 +48,7 @@ export default function MediaLibrary() {
             updateAsset(asset.id, { 
               uploadStatus: 'success',
               filePath: data.asset.filePath,
-              thumbnail: data.asset.thumbnail
+              thumbnail: asset.thumbnail || data.asset.thumbnail
             });
           } else {
             updateAsset(asset.id, { uploadStatus: 'failed' });
@@ -84,6 +93,19 @@ export default function MediaLibrary() {
     xhr.open('POST', 'http://localhost:3001/api/upload');
     xhr.send(formData);
   }, [updateAsset, addSnackbar]);
+
+  // Listen for custom event to upload extracted audio assets
+  // This ensures extracted audio is uploaded like other assets
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ asset: AssetMeta, file: File }>;
+      if (custom.detail && custom.detail.asset && custom.detail.file) {
+        doUpload(custom.detail.asset, custom.detail.file);
+      }
+    };
+    window.addEventListener('media-library-upload', handler);
+    return () => window.removeEventListener('media-library-upload', handler);
+  }, [doUpload]);
 
   const uploadFile = useCallback(async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';

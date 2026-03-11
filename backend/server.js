@@ -50,6 +50,9 @@ app.use((req, res, next) => {
   // Log response when it's sent
   res.json = function(data) {
     const duration = Date.now() - startTime;
+
+    logger.api("following log due for deletion")
+
     logger.api(req.method, req.path, res.statusCode, {
       duration: `${duration}ms`,
       timestamp: new Date().toISOString()
