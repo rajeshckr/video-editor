@@ -309,7 +309,11 @@ export const useEditorStore = create<EditorState>()(
         const clip = track.clips.find(c => c.id === clipId);
         logger.action(`Remove clip`, 'SUCCESS', { clipName: clip?.originalName, trackName: track.name });
         track.clips = track.clips.filter(c => c.id !== clipId);
-        
+        // If the removed clip was selected, select another or clear
+        if (state.selectedClipId === clipId) {
+          const allClips = state.project.tracks.flatMap(t => t.clips);
+          state.selectedClipId = allClips.length > 0 ? allClips[0].id : null;
+        }
         // Auto-update outPoint if not manually set
         if (!get().outPointManuallySet) {
           const allClips = state.project.tracks.flatMap(t => t.clips);
@@ -392,11 +396,12 @@ export const useEditorStore = create<EditorState>()(
     }),
 
     extractAudioFromVideo: async (trackId, clipId) => {
+
       const state = get();
-      console.log('[extractAudioFromVideo] called with trackId:', trackId, 'clipId:', clipId);
+      logger.debug('[extractAudioFromVideo] called with trackId:', trackId, 'clipId:', clipId);
       const vTrack = state.project.tracks.find(t => t.id === trackId);
       if (!vTrack) {
-        console.error('[extractAudioFromVideo] No video track found for trackId:', trackId);
+        logger.error('[extractAudioFromVideo] No video track found for trackId:', trackId);
         return;
       }
       const vClip = vTrack.clips.find(c => c.id === clipId);
@@ -421,21 +426,21 @@ export const useEditorStore = create<EditorState>()(
         try {
           const fileName = vClip.filePath.split(/[\\/]/).pop();
           const url = `http://localhost:3001/api/upload/file/${fileName}`;
-          console.log('[extractAudioFromVideo] Fetching videoBlob from server:', url);
+          logger.debug('[extractAudioFromVideo] Fetching videoBlob from server:', url);
           videoBlob = await (await fetch(url)).blob();
         } catch(e) {
-          console.error('[extractAudioFromVideo] Failed to fetch videoBlob from server:', e);
+          logger.error('[extractAudioFromVideo] Failed to fetch videoBlob from server:', e);
         }
       }
       
       if (!videoBlob) {
-        console.error('[extractAudioFromVideo] Failed to retrieve video data for extraction.');
+        logger.error('[extractAudioFromVideo] Failed to retrieve video data for extraction.');
         state.addSnackbar('error', 'Failed to retrieve video data for extraction.');
         return;
       }
 
       try {
-        console.log('[extractAudioFromVideo] Calling extractAudioLocally...');
+        logger.debug('[extractAudioFromVideo] Calling extractAudioLocally...');
         const audioFile = await extractAudioLocally(videoBlob, vClip.originalName);
 
         // Extract metadata for the audio file
@@ -450,7 +455,7 @@ export const useEditorStore = create<EditorState>()(
           meta = { duration: 0, width: 0, height: 0, fps: 0, type: 'audio', thumbnailUrl: undefined };
         }
 
-        // Create AssetMeta for the extracted audio with real metadata
+        // 1. Add the audio asset to the media library and queue upload
         const assetId = uuidv4();
         const localUrl = URL.createObjectURL(audioFile);
         const asset: AssetMeta = {
@@ -469,26 +474,15 @@ export const useEditorStore = create<EditorState>()(
           uploadStatus: 'uploading',
           thumbnail: meta.thumbnailUrl
         };
-
-        logger.info('Audio extraction - new asset (pending upload):', asset);
         set(draft => {
           draft.assets.push(asset);
         });
-
-        // Dispatch a custom event so MediaLibrary can pick up and upload this asset
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('media-library-upload', { detail: { asset, file: audioFile } }));
         }, 0);
 
-        // Add extracted audio as a clip to the first audio track (or create one)
+        // 2. Add a clip referencing this asset to a specific audio track at a computed position
         set(draft => {
-          // Mute the original video clip
-          const draftVTrack = draft.project.tracks.find(t => t.id === trackId);
-          const draftVClip = draftVTrack?.clips.find(c => c.id === clipId);
-          // if (draftVClip) {
-          //     draftVClip.volume = 0;
-          // }
-
           // Find or create an audio track
           let aTrack = draft.project.tracks.find(t => t.type === 'audio');
           if (!aTrack) {
@@ -504,8 +498,14 @@ export const useEditorStore = create<EditorState>()(
             };
             draft.project.tracks.push(aTrack);
             logger.action(`Create audio track for extraction`, 'SUCCESS', { trackName: aTrack.name });
-            console.log('[extractAudioFromVideo] Created new audio track:', aTrack);
+            logger.debug('[extractAudioFromVideo] Created new audio track:', aTrack);
           }
+
+          // Compute timeline position and duration to match the original video clip
+          const draftVTrack = draft.project.tracks.find(t => t.id === trackId);
+          const draftVClip = draftVTrack?.clips.find(c => c.id === clipId);
+          const timelinePosition = draftVClip ? draftVClip.timelinePosition : 0;
+          const timelineDuration = meta.duration || (draftVClip ? draftVClip.timelineDuration ?? 0 : 0);
 
           // Add the audio clip to the audio track
           const aClip: Clip = {
@@ -517,18 +517,18 @@ export const useEditorStore = create<EditorState>()(
             filePath: '', // Will be set after upload
             localUrl: localUrl,
             localFile: audioFile,
-            timelinePosition: draftVClip ? draftVClip.timelinePosition : 0,
-            timelineDuration: draftVClip ? draftVClip.timelineDuration ?? 0 : 0,
+            timelinePosition,
+            timelineDuration,
             srcStart: 0,
-            srcEnd: 0,
+            srcEnd: meta.duration || 0,
             volume: 1,
             opacity: 1,
             transform: { x: 0, y: 0, scale: 1, rotation: 0 },
             effects: [],
-            thumbnail: undefined,
-            width: 0,
-            height: 0,
-            fps: 0,
+            thumbnail: meta.thumbnailUrl,
+            width: meta.width,
+            height: meta.height,
+            fps: meta.fps,
           };
           aTrack.clips.push(aClip);
           logger.info('Audio extraction - new audio clip added to audio track:', aClip);
@@ -588,12 +588,17 @@ export const useEditorStore = create<EditorState>()(
     }),
 
     undo: () => {
-      const { history, historyIndex } = get();
+      const { history, historyIndex, selectedClipId } = get();
       if (historyIndex > 0) {
         logger.action('Undo', 'SUCCESS', { fromIndex: historyIndex, toIndex: historyIndex - 1 });
         set(state => {
           state.historyIndex = historyIndex - 1;
           state.project = JSON.parse(JSON.stringify(history[historyIndex - 1]));
+          // If previous selectedClipId is not present, select first available
+          const allClips = state.project.tracks.flatMap(t => t.clips);
+          if (!allClips.find(c => c.id === selectedClipId)) {
+            state.selectedClipId = allClips.length > 0 ? allClips[0].id : null;
+          }
         });
       } else {
         logger.warn('Undo: already at beginning of history');
@@ -601,12 +606,17 @@ export const useEditorStore = create<EditorState>()(
     },
 
     redo: () => {
-      const { history, historyIndex } = get();
+      const { history, historyIndex, selectedClipId } = get();
       if (historyIndex < history.length - 1) {
         logger.action('Redo', 'SUCCESS', { fromIndex: historyIndex, toIndex: historyIndex + 1 });
         set(state => {
           state.historyIndex = historyIndex + 1;
           state.project = JSON.parse(JSON.stringify(history[historyIndex + 1]));
+          // If previous selectedClipId is not present, select first available
+          const allClips = state.project.tracks.flatMap(t => t.clips);
+          if (!allClips.find(c => c.id === selectedClipId)) {
+            state.selectedClipId = allClips.length > 0 ? allClips[0].id : null;
+          }
         });
       } else {
         logger.warn('Redo: already at end of history');
@@ -620,7 +630,9 @@ export const useEditorStore = create<EditorState>()(
       state.project = project;
       state.assets = assets;
       state.cursorTime = 0;
-      state.selectedClipId = null;
+      // Auto-select first available clip if any
+      const allClips = project.tracks.flatMap(t => t.clips);
+      state.selectedClipId = allClips.length > 0 ? allClips[0].id : null;
       state.outPointManuallySet = false; // Reset flag on project load
     }),
 

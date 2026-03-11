@@ -40,6 +40,8 @@ export default function PropertiesPanel() {
   const update = (field: string, value: unknown) => updateClip(selectedTrackId, selectedClip!.id, { [field]: value });
   const isText = selectedClip.type === 'text';
   const isImage = selectedClip.type === 'image';
+  const isVideo = selectedClip.type === 'video';
+  const isAudio = selectedClip.type === 'audio';
   const tr = selectedClip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
   const anchorX = isText ? (selectedClip.x ?? (project.resolution.width / 2)) : (project.resolution.width / 2);
   const anchorY = isText ? (selectedClip.y ?? (project.resolution.height / 2)) : (project.resolution.height / 2);
@@ -49,16 +51,16 @@ export default function PropertiesPanel() {
   const bgRgb = normalizeHexRgb(bgColorValue);
   const isTransparentBg = bgColorValue === 'transparent';
 
-  if (!isText && !isImage) {
+  if (!isText && !isImage && !isVideo && !isAudio) {
     return (
       <div className="flex flex-col h-full bg-editor-panel p-3">
         <div className="text-xs font-semibold text-editor-muted uppercase tracking-wider mb-3">Properties</div>
-        <div className="text-xs text-hint text-center mt-8">Select a text or image clip to edit properties.</div>
+        <div className="text-xs text-hint text-center mt-8">Select a text, image, video, or audio clip to edit properties.</div>
       </div>
     );
   }
 
-  const effectiveTab: 'basic' | 'style' | 'position' = isImage
+  const effectiveTab: 'basic' | 'style' | 'position' = (isImage || isVideo || isAudio)
     ? 'position'
     : activeTab;
 
@@ -70,8 +72,8 @@ export default function PropertiesPanel() {
       </div>
 
       <div className="px-3 pt-3">
-        <div className={`grid ${isImage ? 'grid-cols-1' : 'grid-cols-3'} gap-1 bg-editor-bg p-1 rounded border border-editor-border text-[11px]`}>
-          {!isImage && (
+        <div className={`grid ${(isImage || isVideo || isAudio) ? 'grid-cols-1' : 'grid-cols-3'} gap-1 bg-editor-bg p-1 rounded border border-editor-border text-[11px]`}>
+          {!(isImage || isVideo || isAudio) && (
             <>
               <button
                 className={`py-1 rounded ${effectiveTab === 'basic' ? 'bg-blue-600 text-white' : 'text-editor-muted hover:bg-editor-border'}`}
@@ -242,6 +244,23 @@ export default function PropertiesPanel() {
 
         {effectiveTab === 'position' && (
           <div className="space-y-2">
+            {/* Audio volume control */}
+            {isAudio && (
+              <div>
+                <label className="text-xs text-editor-muted mb-1 block">Volume: {(selectedClip.volume ?? 1).toFixed(2)}</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={selectedClip.volume ?? 1}
+                  onChange={e => update('volume', Number(e.target.value))}
+                  className="range-slider w-full"
+                />
+              </div>
+            )}
+            {/* Video/image/text controls */}
+            {(isImage || isVideo || isText) && <>
             <div>
               <label className="text-xs text-editor-muted mb-1 block">Opacity: {Math.round((selectedClip.opacity ?? 1) * 100)}%</label>
               <input
@@ -296,6 +315,19 @@ export default function PropertiesPanel() {
                 }}
               />
             </div>
+            <div>
+              <label className="text-xs text-editor-muted mb-1 block">Rotation: {tr.rotation}°</label>
+              <input
+                className="range-slider w-full"
+                type="range"
+                min={-180}
+                max={180}
+                step={1}
+                value={tr.rotation}
+                onChange={e => update('transform', { ...tr, rotation: Number(e.target.value) })}
+              />
+            </div>
+            </>}
           </div>
         )}
 

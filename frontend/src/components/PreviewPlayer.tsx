@@ -338,7 +338,8 @@ export default function PreviewPlayer() {
           const clip = track.clips.find(c => newTime >= c.timelinePosition && newTime < c.timelinePosition + c.timelineDuration);
           if (clip) {
             const src = clip.localUrl || `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
-            if (!aRef.src.includes(clip.filePath.split(/[\\/]/).pop()!) && (!clip.localUrl || aRef.src !== clip.localUrl)) {
+            
+            if (!aRef.src.includes(src.split('/').pop()!)) { 
               aRef.src = src; aRef.load();
             }
             aRef.volume = clip.volume ?? 1;
