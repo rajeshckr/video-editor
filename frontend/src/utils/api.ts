@@ -8,7 +8,7 @@ import Logger from './logger';
 
 const logger = Logger.getInstance('API');
 // Use environment variable for API_BASE
-const API_BASE = import.meta.env.V_API_BASE_URL ;
+const API_BASE = import.meta.env.VITE_API_BASE_URL ;
 
 
 export function getApiBaseUrl(): string {
@@ -53,7 +53,7 @@ function parseRequestBody(body: BodyInit | null | undefined): unknown {
  * @returns Promise<Response>
  */
 export async function apiFetch(endpoint: string, options?: RequestInit): Promise<Response> {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+  const url = isAbsoluteUrl(endpoint) ? endpoint : `${getApiBaseUrl()}${endpoint}`;
   const method = options?.method || 'GET';
   
   // Parse request payload if present
@@ -195,9 +195,9 @@ export const api = {
     endpoint: string,
     formData: FormData,
     onProgress?: (percent: number) => void,
-    options?: { headers?: Record<string, string>; logger?: unknown }
+    options?: { headers?: Record<string, string>; logger?: LoggerType }
   ): Promise<unknown> {
-    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+    const url = isAbsoluteUrl(endpoint) ? endpoint : `${getApiBaseUrl()}${endpoint}`;
     const loggerInstance = (options?.logger || logger) as LoggerType;
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -278,4 +278,8 @@ export { API_BASE };
 interface LoggerType {
   debug: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
+}
+
+function isAbsoluteUrl(endpoint: string): boolean {
+  return /^https?:\/\//i.test(endpoint);
 }
