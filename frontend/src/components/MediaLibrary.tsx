@@ -6,7 +6,7 @@ import { extractLocalMetadata } from '../utils/mediaUtils';
 import { useEffect } from 'react';
 import { api } from '../utils/api';
 
-const API = 'http://localhost:3001';
+
 const ALLOWED = ['mp4','mov','mkv','webm','mp3','wav','aac','jpg','jpeg','png','webp'];
 
 interface UploadResponse {
@@ -254,7 +254,7 @@ export default function MediaLibrary() {
               {/* Thumbnail or icon */}
               <div className="w-12 h-8 shrink-0 rounded overflow-hidden bg-editor-bg flex items-center justify-center">
                 {asset.thumbnail
-                  ? <img src={asset.thumbnail.startsWith('data:') ? asset.thumbnail : `${API}${asset.thumbnail}`} alt="" className="w-full h-full object-cover" />
+                  ? <img src={asset.thumbnail.startsWith('data:') ? asset.thumbnail : `${api.getApiBaseUrl()}${asset.thumbnail}`} alt="" className="w-full h-full object-cover" />
                   : <span className="text-base">{iconForType(asset.type)}</span>
                 }
               </div>

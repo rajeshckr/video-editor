@@ -7,7 +7,13 @@
 import Logger from './logger';
 
 const logger = Logger.getInstance('API');
-const API_BASE = 'http://localhost:3001';
+// Use environment variable for API_BASE
+const API_BASE = import.meta.env.V_API_BASE_URL ;
+
+
+export function getApiBaseUrl(): string {
+  return API_BASE;
+} 
 
 /**
  * Parse request body for logging

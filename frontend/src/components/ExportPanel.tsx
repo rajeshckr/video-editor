@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { api } from '../utils/api';
 
-const API = 'http://localhost:3001';
-
 export default function ExportPanel() {
   const { project, setExportPanelOpen, setInPoint, setOutPoint, addSnackbar } = useEditorStore();
   const [format, setFormat] = useState('mp4');
@@ -43,14 +41,14 @@ export default function ExportPanel() {
       }
 
       // Open SSE stream for progress
-      const evtSource = new EventSource(`${API}/api/render/progress/${jobId}`);
+      const evtSource = new EventSource(`${api.getApiBaseUrl()}/api/render/progress/${jobId}`);
       evtSource.onmessage = (e) => {
         const data = JSON.parse(e.data);
         setProgress(data.progress || 0);
         if (data.status === 'done') {
           evtSource.close();
           setStatus('done');
-          setDownloadUrl(`${API}/api/render/download/${jobId}`);
+          setDownloadUrl(`${api.getApiBaseUrl()}/api/render/download/${jobId}`);
           addSnackbar('success', 'Render completed successfully');
         }
         if (data.status === 'error') {

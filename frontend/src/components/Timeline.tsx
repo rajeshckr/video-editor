@@ -852,7 +852,7 @@ export default function Timeline() {
                           {/* Thumbnail strip for video */}
                           {clip.type === 'video' && clip.thumbnail && (
                             <div className="absolute inset-0 w-full h-full opacity-50 bg-cover bg-center"
-                              style={{ backgroundImage: `url(${clip.thumbnail.startsWith('data:') ? clip.thumbnail : `http://localhost:3001${clip.thumbnail}`})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
+                              style={{ backgroundImage: `url(${clip.thumbnail.startsWith('data:') ? clip.thumbnail : `${api.getApiBaseUrl()}${clip.thumbnail}`})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
                           )}
                           {/* Waveform bg for audio */}
                           {clip.type === 'audio' && <div className="absolute inset-0 waveform-bg opacity-40" />}

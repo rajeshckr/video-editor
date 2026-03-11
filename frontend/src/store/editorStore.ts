@@ -398,7 +398,7 @@ export const useEditorStore = create<EditorState>()(
     extractAudioFromVideo: async (trackId, clipId) => {
 
       const state = get();
-      logger.debug('[extractAudioFromVideo] called with trackId:', trackId, 'clipId:', clipId);
+      logger.debug(`[extractAudioFromVideo] called with trackId: ${trackId}, clipId: ${clipId}`);
       const vTrack = state.project.tracks.find(t => t.id === trackId);
       if (!vTrack) {
         logger.error('[extractAudioFromVideo] No video track found for trackId:', trackId);
@@ -425,7 +425,7 @@ export const useEditorStore = create<EditorState>()(
       if (!videoBlob) {
         try {
           const fileName = vClip.filePath.split(/[\\/]/).pop();
-          const url = `http://localhost:3001/api/upload/file/${fileName}`;
+          const url = `${api.getApiBaseUrl()}/api/upload/file/${fileName}`;
           logger.debug('[extractAudioFromVideo] Fetching videoBlob from server:', url);
           videoBlob = await (await fetch(url)).blob();
         } catch(e) {
