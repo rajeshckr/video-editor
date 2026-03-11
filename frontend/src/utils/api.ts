@@ -175,8 +175,101 @@ export const api = {
       ...options,
       method: 'POST',
       body: formData
-    })
+    }),
+  
+  /**
+   * Upload file(s) with progress and logging using XMLHttpRequest
+   * @param endpoint - API endpoint (relative or absolute)
+   * @param formData - FormData containing file(s)
+   * @param onProgress - Progress callback (percent: number)
+   * @param options - Optional: headers, logger override
+   * @returns Promise resolving to parsed response or rejecting with error
+   */
+  uploadWithProgress(
+    endpoint: string,
+    formData: FormData,
+    onProgress?: (percent: number) => void,
+    options?: { headers?: Record<string, string>; logger?: unknown }
+  ): Promise<unknown> {
+    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+    const loggerInstance = (options?.logger || logger) as LoggerType;
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      if (options?.headers) {
+        Object.entries(options.headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      }
+
+      const startTime = performance.now();
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        const duration = Math.round(performance.now() - startTime);
+        let responseBody = null;
+        try {
+          responseBody = JSON.parse(xhr.responseText);
+        } catch {
+          responseBody = xhr.responseText;
+        }
+        const logData = {
+          request: {
+            method: 'POST',
+            endpoint,
+            payload: '[FormData - binary content]'
+          },
+          response: {
+            status: xhr.status,
+            duration,
+            body: responseBody
+          }
+        };
+        if (xhr.status >= 200 && xhr.status < 300) {
+          loggerInstance.debug(`POST ${endpoint} [${duration}ms]`, logData);
+          resolve(responseBody);
+        } else {
+          loggerInstance.error(`POST ${endpoint} [${duration}ms] - ${xhr.status}`, logData);
+          reject(new Error(`Upload failed: HTTP ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        const duration = Math.round(performance.now() - startTime);
+        const logData = {
+          request: {
+            method: 'POST',
+            endpoint,
+            payload: '[FormData - binary content]'
+          },
+          response: {
+            status: xhr.status,
+            duration,
+            error: xhr.statusText
+          }
+        };
+        loggerInstance.error(`POST ${endpoint} [${duration}ms] - Network Error`, logData);
+        reject(new Error('Network error during upload'));
+      });
+
+      xhr.addEventListener('abort', () => {
+        loggerInstance.error(`POST ${endpoint} - Upload aborted`);
+        reject(new Error('Upload aborted'));
+      });
+
+      xhr.send(formData);
+    });
+  }
 };
 
 // Export base URL for cases where full URL is needed
 export { API_BASE };
+
+// Add at the top or near logger definition:
+interface LoggerType {
+  debug: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+}

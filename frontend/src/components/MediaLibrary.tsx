@@ -4,9 +4,19 @@ import { useEditorStore } from '../store/editorStore';
 import type { AssetMeta, Clip } from '../types';
 import { extractLocalMetadata } from '../utils/mediaUtils';
 import { useEffect } from 'react';
+import { api } from '../utils/api';
 
 const API = 'http://localhost:3001';
 const ALLOWED = ['mp4','mov','mkv','webm','mp3','wav','aac','jpg','jpeg','png','webp'];
+
+interface UploadResponse {
+  success: boolean;
+  asset: {
+    filePath: string;
+    thumbnail?: string;
+  };
+  error?: string;
+}
 
 export default function MediaLibrary() {
   const { assets, addAsset, updateAsset, project, addClipToTrack, addSnackbar } = useEditorStore();
@@ -16,82 +26,57 @@ export default function MediaLibrary() {
   const [uploading, setUploading] = useState<Record<string, number>>({}); // assetId -> progress (0-100)
 
   const doUpload = useCallback((asset: AssetMeta, file: File) => {
-
-    //log using loggedr asset and file summary (without file content) for debugging upload issues
+    // Log using logger asset and file summary (without file content) for debugging upload issues
     console.log('[doUpload] Upload triggered for asset', {
       asset: asset,
       file: file
-    } );
-    
+    });
 
     setUploading(prev => ({ ...prev, [asset.id]: 0 }));
     updateAsset(asset.id, { uploadStatus: 'uploading' });
-    
+
     const formData = new FormData();
     formData.append('file', file);
-    
-    const xhr = new XMLHttpRequest();
-    
-    // Track upload progress
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        const progress = Math.round((e.loaded / e.total) * 100);
+
+    api.uploadWithProgress(
+      '/api/upload',
+      formData,
+      (progress: number) => {
         setUploading(prev => ({ ...prev, [asset.id]: progress }));
       }
-    });
-    
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (data.success) {
-            updateAsset(asset.id, { 
-              uploadStatus: 'success',
-              filePath: data.asset.filePath,
-              thumbnail: asset.thumbnail || data.asset.thumbnail
-            });
-          } else {
-            updateAsset(asset.id, { uploadStatus: 'failed' });
-            addSnackbar('error', `Upload failed: ${data.error}`);
-          }
-        } catch {
-          updateAsset(asset.id, { uploadStatus: 'failed' });
-          addSnackbar('error', `Upload failed: Invalid response`);
-        }
+    ).then((data: unknown) => {
+      const resp = data as UploadResponse;
+      if (resp && resp.success) {
+        updateAsset(asset.id, {
+          uploadStatus: 'success',
+          filePath: resp.asset.filePath,
+          thumbnail: asset.thumbnail || resp.asset.thumbnail
+        });
+      } else if (resp && resp.error) {
+        updateAsset(asset.id, { uploadStatus: 'failed' });
+        addSnackbar('error', `Upload failed: ${resp.error}`);
       } else {
         updateAsset(asset.id, { uploadStatus: 'failed' });
-        addSnackbar('error', `Upload failed: HTTP ${xhr.status}`);
+        addSnackbar('error', 'Upload failed: Invalid response');
       }
-      // Remove from uploading
-      setUploading(prev => {
-        const next = { ...prev };
-        delete next[asset.id];
-        return next;
-      });
-    });
-    
-    xhr.addEventListener('error', () => {
+    }).catch((err) => {
       updateAsset(asset.id, { uploadStatus: 'failed' });
-      addSnackbar('error', `Upload error: ${file.name}`);
+      if (err instanceof Error && err.message.startsWith('Upload failed: HTTP')) {
+        addSnackbar('error', err.message);
+      } else if (err instanceof Error && err.message === 'Network error during upload') {
+        addSnackbar('error', `Upload error: ${file.name}`);
+      } else if (err instanceof Error && err.message === 'Upload aborted') {
+        addSnackbar('error', `Upload cancelled: ${file.name}`);
+      } else {
+        addSnackbar('error', `Upload failed: ${file.name}`);
+      }
+    }).finally(() => {
       setUploading(prev => {
         const next = { ...prev };
         delete next[asset.id];
         return next;
       });
     });
-    
-    xhr.addEventListener('abort', () => {
-      updateAsset(asset.id, { uploadStatus: 'failed' });
-      addSnackbar('error', `Upload cancelled: ${file.name}`);
-      setUploading(prev => {
-        const next = { ...prev };
-        delete next[asset.id];
-        return next;
-      });
-    });
-    
-    xhr.open('POST', 'http://localhost:3001/api/upload');
-    xhr.send(formData);
   }, [updateAsset, addSnackbar]);
 
   // Listen for custom event to upload extracted audio assets
@@ -117,7 +102,7 @@ export default function MediaLibrary() {
     let meta;
     try {
       meta = await extractLocalMetadata(file);
-    } catch (err) {
+    } catch {
       addSnackbar('error', `Could not read metadata for ${file.name}`);
       return;
     }
@@ -206,7 +191,7 @@ export default function MediaLibrary() {
 
   const formatDuration = (s: number) => {
     if (!s) return '--';
-    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    const m = Math.floor(s / 60), sec = Math.floor(s % 66);
     return `${m}:${String(sec).padStart(2,'0')}`;
   };
 
