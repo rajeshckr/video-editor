@@ -3,6 +3,25 @@ import { useEditorStore } from '../store/editorStore';
 import type { Clip } from '../types';
 import { api } from '../utils/api';
 
+/** Resolve the best media source URL for a clip via its linked asset. */
+function resolveClipSrc(clip: Clip): string {
+  const assets = useEditorStore.getState().assets;
+  const asset = clip.assetId ? assets.find(a => a.id === clip.assetId) : undefined;
+  if (asset?.localUrl) return asset.localUrl;
+  if (asset?.filePath) {
+    const filename = asset.filePath.split(/[\\/]/).pop();
+    return `${api.getApiBaseUrl()}/api/upload/file/${filename}`;
+  }
+  return '';
+}
+
+/** Resolve the server filename for a clip via its linked asset. */
+function resolveClipFilename(clip: Clip): string {
+  const assets = useEditorStore.getState().assets;
+  const asset = clip.assetId ? assets.find(a => a.id === clip.assetId) : undefined;
+  return asset?.filePath?.split(/[\\/]/).pop() || '';
+}
+
 
 export default function PreviewPlayer() {
   const {
@@ -108,8 +127,8 @@ export default function PreviewPlayer() {
           const vid = videoRef.current;
           if (vid && vid.readyState >= 2) {
             // Check if this clip is the currently playing video in the hidden video element
-            const src = clip.localUrl || `${api.getApiBaseUrl()}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
-            if (vid.src.includes(src.split('/').pop()!)) {
+            const src = resolveClipSrc(clip);
+            if (src && vid.src.includes(src.split('/').pop()!)) {
               ctx.save();
               ctx.globalAlpha = clip.opacity ?? 1;
               
@@ -132,7 +151,7 @@ export default function PreviewPlayer() {
         }
 
         if (clip.type === 'image') {
-          const filename = clip.filePath.split(/[\\/]/).pop();
+          const filename = resolveClipFilename(clip);
           if (filename) {
             let img = imageCache.current[filename];
             if (!img) {
@@ -142,7 +161,7 @@ export default function PreviewPlayer() {
                 const liveTime = useEditorStore.getState().cursorTime;
                 drawOverlays(liveTime, liveProj);
               };
-              img.src = clip.localUrl || `${api.getApiBaseUrl()}/api/upload/file/${filename}`;
+              img.src = resolveClipSrc(clip);
               imageCache.current[filename] = img;
             }
             if (img.complete && img.naturalHeight !== 0) {
@@ -247,7 +266,7 @@ export default function PreviewPlayer() {
         const track = project.tracks.find(t => t.id === clip.trackId);
         vid.muted = track?.muted || false;
         vid.volume = clip.volume ?? 1;
-        const src = clip.localUrl || `${api.getApiBaseUrl()}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+        const src = resolveClipSrc(clip);
         if (!vid.src.includes(src.split('/').pop()!)) { 
           vid.src = src; 
           vid.load();
@@ -270,8 +289,8 @@ export default function PreviewPlayer() {
       if (!aRef) continue;
       const aClip = track.clips.find(c => cursorTime >= c.timelinePosition && cursorTime < c.timelinePosition + c.timelineDuration);
       if (aClip && !track.muted && track.visible) {
-        const src = aClip.localUrl || `${api.getApiBaseUrl()}/api/upload/file/${aClip.filePath.split(/[\\/]/).pop()}`;
-        if (!aRef.src.includes(aClip.filePath.split(/[\\/]/).pop()!) && (!aClip.localUrl || aRef.src !== aClip.localUrl)) { aRef.src = src; aRef.load(); }
+        const src = resolveClipSrc(aClip);
+        if (!aRef.src.includes(src.split('/').pop()!)) { aRef.src = src; aRef.load(); }
         aRef.volume = aClip.volume ?? 1;
         const clipOffset = cursorTime - aClip.timelinePosition + aClip.srcStart;
         if (Math.abs(aRef.currentTime - clipOffset) > 0.1) aRef.currentTime = clipOffset;
@@ -312,8 +331,8 @@ export default function PreviewPlayer() {
             const track = proj.tracks.find(t => t.id === clip.trackId);
             vid.muted = track?.muted || false;
             vid.volume = clip.volume ?? 1;
-            const src = clip.localUrl || `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
-            if (!vid.src.includes(clip.filePath.split(/[\\/]/).pop()!) && (!clip.localUrl || vid.src !== clip.localUrl)) {
+            const src = resolveClipSrc(clip);
+            if (!vid.src.includes(src.split('/').pop()!)) {
               vid.src = src; vid.load();
             }
             if (vid.paused) vid.play().catch(() => {});
@@ -337,7 +356,7 @@ export default function PreviewPlayer() {
 
           const clip = track.clips.find(c => newTime >= c.timelinePosition && newTime < c.timelinePosition + c.timelineDuration);
           if (clip) {
-            const src = clip.localUrl || `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+            const src = resolveClipSrc(clip);
             
             if (!aRef.src.includes(src.split('/').pop()!)) { 
               aRef.src = src; aRef.load();

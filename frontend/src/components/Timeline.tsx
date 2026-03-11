@@ -3,6 +3,7 @@ import { useEditorStore } from '../store/editorStore';
 import Logger from '../utils/logger';
 import type { Clip } from '../types';
 import { api } from '../utils/api';
+import { getAssetForClip } from '../utils/assetUtils';
 
 const logger = Logger.getInstance('Timeline');
 
@@ -243,7 +244,6 @@ export default function Timeline() {
 
     const clip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
       type: 'text',
-      filePath: '',
       originalName: 'Text: New Caption',
       srcStart: 0,
       srcEnd: 5,
@@ -314,9 +314,7 @@ export default function Timeline() {
     const pos = Math.max(0, x / zoom);
     const clip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
       type: asset.type === 'image' ? 'image' : asset.type,
-      filePath: asset.filePath,
-      localUrl: asset.localUrl,
-      localFile: asset.localFile,
+      assetId: asset.id,
       originalName: asset.originalName,
       srcStart: 0,
       srcEnd: asset.duration,
@@ -326,10 +324,6 @@ export default function Timeline() {
       opacity: 1,
       transform: { x: 0, y: 0, scale: 1, rotation: 0 },
       effects: [],
-      thumbnail: asset.thumbnail,
-      width: asset.width,
-      height: asset.height,
-      fps: asset.fps,
     };
     addClipToTrack(trackId, clip);
   };
@@ -395,14 +389,16 @@ export default function Timeline() {
 
   // ── Auto-Captioning ────────────────────────────────────────────────────────
   const handleAutoCaption = async (clip: Clip) => {
-    logger.action('Request auto caption', 'PENDING', { clipName: clip.originalName, filePath: clip.filePath });
+    const clipAsset = getAssetForClip(clip, assets);
+    const clipFilePath = clipAsset?.filePath || '';
+    logger.action('Request auto caption', 'PENDING', { clipName: clip.originalName, filePath: clipFilePath });
     setIsCaptioning(prev => ({ ...prev, [clip.id]: true }));
     addSnackbar('info', `Running Whisper AI to generate captions... (This might take a minute)`);
     setContextMenu(null);
 
     try {
-      logger.info('Sending caption request to backend', { filePath: clip.filePath });
-      const resp = await api.post('/api/caption', { filePath: clip.filePath });
+      logger.info('Sending caption request to backend', { filePath: clipFilePath });
+      const resp = await api.post('/api/caption', { filePath: clipFilePath });
 
       if (!resp.ok) {
         const err = await resp.json().catch(()=>({}));
@@ -458,7 +454,6 @@ export default function Timeline() {
 
         const newClip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
            type: 'text',
-           filePath: '',
            originalName: `Caption ${index+1}`,
            srcStart: 0,
            srcEnd: duration,
@@ -811,6 +806,8 @@ export default function Timeline() {
                   {/* Clips */}
                   {track.clips.map(clip => {
                     const colors = clipColor(clip.type);
+                    const clipAssetMeta = getAssetForClip(clip, assets);
+                    const clipThumbnail = clipAssetMeta?.thumbnail;
                     const left = timeToX(clip.timelinePosition);
                     const width = Math.max(4, timeToX(clip.timelineDuration));
                     const isSelected = clip.id === selectedClipId;
@@ -850,9 +847,9 @@ export default function Timeline() {
                         {/* Clip content */}
                         <div className="px-1.5 py-0.5 h-full flex flex-col justify-center gap-0.5 pointer-events-none">
                           {/* Thumbnail strip for video */}
-                          {clip.type === 'video' && clip.thumbnail && (
+                          {clip.type === 'video' && clipThumbnail && (
                             <div className="absolute inset-0 w-full h-full opacity-50 bg-cover bg-center"
-                              style={{ backgroundImage: `url(${clip.thumbnail.startsWith('data:') ? clip.thumbnail : `${api.getApiBaseUrl()}${clip.thumbnail}`})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
+                              style={{ backgroundImage: `url(${clipThumbnail.startsWith('data:') ? clipThumbnail : `${api.getApiBaseUrl()}${clipThumbnail}`})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
                           )}
                           {/* Waveform bg for audio */}
                           {clip.type === 'audio' && <div className="absolute inset-0 waveform-bg opacity-40" />}

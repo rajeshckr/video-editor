@@ -1,9 +1,7 @@
 export interface Clip {
   id: string;
   type: 'video' | 'audio' | 'image' | 'text';
-  filePath: string;
-  localUrl?: string;
-  localFile?: File;
+  assetId?: string; // References AssetMeta.id (undefined for text/caption clips)
   originalName: string;
   srcStart: number;
   srcEnd: number;
@@ -15,10 +13,6 @@ export interface Clip {
   opacity: number;
   transform: { x: number; y: number; scale: number; rotation: number };
   effects: string[];
-  thumbnail?: string;
-  width?: number;
-  height?: number;
-  fps?: number;
   // Text-only
   text?: string;
   font?: string;

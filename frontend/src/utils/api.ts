@@ -153,6 +153,8 @@ export async function apiFetch(endpoint: string, options?: RequestInit): Promise
  * Convenience methods for common HTTP verbs
  */
 export const api = {
+  getApiBaseUrl,
+
   get: (endpoint: string, options?: Omit<RequestInit, 'method'>) => 
     apiFetch(endpoint, { ...options, method: 'GET' }),
   

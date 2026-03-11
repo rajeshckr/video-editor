@@ -286,9 +286,7 @@ export default function MediaLibrary() {
                   const pos = track.clips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
                   const clipData: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
                     type: asset.type === 'image' ? 'image' : asset.type,
-                    filePath: asset.filePath,
-                    localUrl: asset.localUrl,
-                    localFile: asset.localFile,
+                    assetId: asset.id,
                     originalName: asset.originalName,
                     srcStart: 0,
                     srcEnd: asset.duration,
@@ -298,10 +296,6 @@ export default function MediaLibrary() {
                     opacity: 1,
                     transform: { x: 0, y: 0, scale: 1, rotation: 0 },
                     effects: [],
-                    thumbnail: asset.thumbnail,
-                    width: asset.width,
-                    height: asset.height,
-                    fps: asset.fps,
                   };
                   addClipToTrack(track.id, clipData);
                 }}

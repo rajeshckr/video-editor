@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import Logger from '../utils/logger';
 import type { Clip, Track, AssetMeta, Project, SnackbarMessage } from '../types';
 import { extractAudioLocally } from '../utils/ffmpegWasmUtils';
+import { api } from '../utils/api';
 
 const logger = Logger.getInstance('EditorStore');
 
@@ -243,22 +244,25 @@ export const useEditorStore = create<EditorState>()(
         t.clips.some(c => c.type === 'video')
       );
       
-      if (!hasExistingVideoClips && clipData.type === 'video' && clipData.width && clipData.height) {
-        const clipOrientation = clipData.width > clipData.height ? 'landscape' : 'portrait';
-        state.project.orientation = clipOrientation;
-        
-        // Update resolution to match orientation
-        if (clipOrientation === 'portrait') {
-          state.project.resolution = { width: 1080, height: 1920 };
-        } else {
-          state.project.resolution = { width: 1920, height: 1080 };
+      if (!hasExistingVideoClips && clipData.type === 'video' && clipData.assetId) {
+        const clipAsset = state.assets.find(a => a.id === clipData.assetId);
+        if (clipAsset && clipAsset.width && clipAsset.height) {
+          const clipOrientation = clipAsset.width > clipAsset.height ? 'landscape' : 'portrait';
+          state.project.orientation = clipOrientation;
+          
+          // Update resolution to match orientation
+          if (clipOrientation === 'portrait') {
+            state.project.resolution = { width: 1080, height: 1920 };
+          } else {
+            state.project.resolution = { width: 1920, height: 1080 };
+          }
+          
+          logger.action(`Auto-detected orientation from first video clip`, 'SUCCESS', { 
+            orientation: clipOrientation,
+            clipDimensions: { width: clipAsset.width, height: clipAsset.height },
+            newResolution: state.project.resolution
+          });
         }
-        
-        logger.action(`Auto-detected orientation from first video clip`, 'SUCCESS', { 
-          orientation: clipOrientation,
-          clipDimensions: { width: clipData.width, height: clipData.height },
-          newResolution: state.project.resolution
-        });
       }
       
       const newClip: Clip = {
@@ -412,19 +416,22 @@ export const useEditorStore = create<EditorState>()(
 
       state.addSnackbar('info', 'Extracting audio... This may take a moment.');
 
+      // Resolve asset for the video clip
+      const vAsset = vClip.assetId ? state.assets.find(a => a.id === vClip.assetId) : undefined;
+
       // Obtain the file blob (prefer localFile, then localUrl, then server fallback)
-      let videoBlob: Blob | File | undefined = vClip.localFile;
-      if (!videoBlob && vClip.localUrl) {
+      let videoBlob: Blob | File | undefined = vAsset?.localFile;
+      if (!videoBlob && vAsset?.localUrl) {
         try {
-          logger.debug('[extractAudioFromVideo]  Fetching videoBlob from localUrl:', vClip.localUrl);
-          videoBlob = await (await fetch(vClip.localUrl)).blob();
+          logger.debug('[extractAudioFromVideo]  Fetching videoBlob from localUrl:', vAsset.localUrl);
+          videoBlob = await (await fetch(vAsset.localUrl)).blob();
         } catch (e) {
           logger.error('[extractAudioFromVideo] Failed to fetch from localUrl:', e);
         }
       }
-      if (!videoBlob) {
+      if (!videoBlob && vAsset?.filePath) {
         try {
-          const fileName = vClip.filePath.split(/[\\/]/).pop();
+          const fileName = vAsset.filePath.split(/[\\/]/).pop();
           const url = `${api.getApiBaseUrl()}/api/upload/file/${fileName}`;
           logger.debug('[extractAudioFromVideo] Fetching videoBlob from server:', url);
           videoBlob = await (await fetch(url)).blob();
@@ -513,10 +520,8 @@ export const useEditorStore = create<EditorState>()(
             trackId: aTrack.id,
             trackNumber: aTrack.trackNumber,
             type: 'audio',
+            assetId: assetId,
             originalName: audioFile.name,
-            filePath: '', // Will be set after upload
-            localUrl: localUrl,
-            localFile: audioFile,
             timelinePosition,
             timelineDuration,
             srcStart: 0,
@@ -525,10 +530,6 @@ export const useEditorStore = create<EditorState>()(
             opacity: 1,
             transform: { x: 0, y: 0, scale: 1, rotation: 0 },
             effects: [],
-            thumbnail: meta.thumbnailUrl,
-            width: meta.width,
-            height: meta.height,
-            fps: meta.fps,
           };
           aTrack.clips.push(aClip);
           logger.info('Audio extraction - new audio clip added to audio track:', aClip);

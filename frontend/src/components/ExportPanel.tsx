@@ -3,7 +3,7 @@ import { useEditorStore } from '../store/editorStore';
 import { api } from '../utils/api';
 
 export default function ExportPanel() {
-  const { project, setExportPanelOpen, setInPoint, setOutPoint, addSnackbar } = useEditorStore();
+  const { project, assets, setExportPanelOpen, setInPoint, setOutPoint, addSnackbar } = useEditorStore();
   const [format, setFormat] = useState('mp4');
   const [resolution, setResolution] = useState('source');
   const [status, setStatus] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
@@ -25,8 +25,27 @@ export default function ExportPanel() {
     if (resolution === '720p') { width = 1280; height = 720; }
 
     try {
+      // Denormalize: enrich clips with asset fields for the backend
+      const enrichedTracks = project.tracks.map(track => ({
+        ...track,
+        clips: track.clips.map(clip => {
+          if (!clip.assetId) return clip;
+          const asset = assets.find(a => a.id === clip.assetId);
+          if (!asset) return clip;
+          return {
+            ...clip,
+            filePath: asset.filePath,
+            localUrl: asset.localUrl,
+            thumbnail: asset.thumbnail,
+            width: asset.width,
+            height: asset.height,
+            fps: asset.fps,
+          };
+        })
+      }));
+
       const resp = await api.post('/api/render', {
-        project: { ...project, resolution: { width, height } },
+        project: { ...project, resolution: { width, height }, tracks: enrichedTracks, assets },
         inPoint,
         outPoint,
         outputFormat: format,
