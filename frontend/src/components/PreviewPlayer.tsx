@@ -270,12 +270,26 @@ export default function PreviewPlayer() {
         if (!vid.src.includes(src.split('/').pop()!)) { 
           vid.src = src; 
           vid.load();
-          vid.onloadeddata = () => drawOverlays(cursorTime, project);
+          vid.onloadeddata = () => {
+            const clipOff = cursorTime - clip.timelinePosition + clip.srcStart;
+            vid.currentTime = clipOff;
+            const onSeeked = () => {
+              vid.removeEventListener('seeked', onSeeked);
+              drawOverlays(cursorTime, project);
+            };
+            vid.addEventListener('seeked', onSeeked);
+          };
         }
         const clipOffset = cursorTime - clip.timelinePosition + clip.srcStart;
         if (Math.abs(vid.currentTime - clipOffset) > 0.1) {
           vid.currentTime = clipOffset;
-          vid.pause(); // Force preview update
+          vid.pause();
+          // Redraw once the browser finishes seeking to the new frame
+          const onSeeked = () => {
+            vid.removeEventListener('seeked', onSeeked);
+            drawOverlays(cursorTime, project);
+          };
+          vid.addEventListener('seeked', onSeeked);
         }
       } else {
         vid.src = '';
