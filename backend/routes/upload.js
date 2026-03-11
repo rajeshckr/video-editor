@@ -201,6 +201,16 @@ router.post('/', upload.single('file'), async (req, res, next) => {
       }
     }
 
+    //log res but truncate all long text fields to 100 chars
+    const logMetadata = {
+      ...metadata,
+      transcript: metadata.transcript?.slice(0, 100) || null,
+      captions: metadata.captions?.slice(0, 100) || null,
+      aiMetadata: metadata.aiMetadata ? JSON.stringify(metadata.aiMetadata).slice(0, 100) : null,
+    };
+
+    console.info('[upload][success]', logMetadata);
+
     res.json({ success: true, asset: metadata });
   } catch (err) {
     console.error('[upload][error]', {

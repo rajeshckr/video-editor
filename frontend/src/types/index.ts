@@ -2,6 +2,8 @@ export interface Clip {
   id: string;
   type: 'video' | 'audio' | 'image' | 'text';
   filePath: string;
+  localUrl?: string;
+  localFile?: File;
   originalName: string;
   srcStart: number;
   srcEnd: number;
@@ -43,6 +45,9 @@ export interface AssetMeta {
   originalName: string;
   filename: string;
   filePath: string;
+  localUrl?: string; // Instant preview URL
+  localFile?: File; // For local processing (wasm-ffmpeg)
+  uploadStatus?: 'uploading' | 'success' | 'failed'; // Upload tracking
   size: number;
   type: 'video' | 'audio' | 'image';
   duration: number;

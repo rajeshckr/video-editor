@@ -299,7 +299,10 @@ export default function Timeline() {
     setHighlightedTrackId(null);
     const raw = e.dataTransfer.getData('application/json');
     if (!raw) return;
-    const { asset } = JSON.parse(raw);
+    const dragData = JSON.parse(raw);
+    const assetId = dragData.assetId;
+    const storeAsset = useEditorStore.getState().assets.find(a => a.id === assetId);
+    const asset = storeAsset || dragData.asset;
     if (!asset) return;
 
     if (asset.type === 'video' && trackType !== 'video') { addSnackbar('error', 'Video clips must go on Video tracks.'); return; }
@@ -312,6 +315,8 @@ export default function Timeline() {
     const clip: Omit<Clip, 'id' | 'trackId' | 'trackNumber'> = {
       type: asset.type === 'image' ? 'image' : asset.type,
       filePath: asset.filePath,
+      localUrl: asset.localUrl,
+      localFile: asset.localFile,
       originalName: asset.originalName,
       srcStart: 0,
       srcEnd: asset.duration,
@@ -847,7 +852,7 @@ export default function Timeline() {
                           {/* Thumbnail strip for video */}
                           {clip.type === 'video' && clip.thumbnail && (
                             <div className="absolute inset-0 w-full h-full opacity-50 bg-cover bg-center"
-                              style={{ backgroundImage: `url(http://localhost:3001${clip.thumbnail})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
+                              style={{ backgroundImage: `url(${clip.thumbnail.startsWith('data:') ? clip.thumbnail : `http://localhost:3001${clip.thumbnail}`})`, backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' }} />
                           )}
                           {/* Waveform bg for audio */}
                           {clip.type === 'audio' && <div className="absolute inset-0 waveform-bg opacity-40" />}

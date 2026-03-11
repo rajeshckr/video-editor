@@ -3,6 +3,8 @@ import { immer } from 'zustand/middleware/immer';
 import { v4 as uuidv4 } from 'uuid';
 import Logger from '../utils/logger';
 import type { Clip, Track, AssetMeta, Project, SnackbarMessage } from '../types';
+import { extractAudioLocally } from '../utils/ffmpegWasmUtils';
+import { api } from '../utils/api';
 
 const logger = Logger.getInstance('EditorStore');
 
@@ -98,6 +100,7 @@ interface EditorState {
   addSnackbar: (type: SnackbarMessage['type'], message: string) => void;
   removeSnackbar: (id: string) => void;
   addAsset: (asset: AssetMeta) => void;
+  updateAsset: (assetId: string, updates: Partial<AssetMeta>) => void;
   addTrack: (type: Track['type']) => void;
   removeTrack: (trackId: string) => void;
   updateTrack: (trackId: string, updates: Partial<Track>) => void;
@@ -107,7 +110,7 @@ interface EditorState {
   reorderTrack: (draggedId: string, targetId: string) => void;
   moveClip: (fromTrackId: string, toTrackId: string, clipId: string, newPosition: number) => void;
   splitClip: (trackId: string, clipId: string, splitTime: number) => void;
-  extractAudioFromVideo: (trackId: string, clipId: string) => void;
+  extractAudioFromVideo: (trackId: string, clipId: string) => Promise<void>;
   setCursorTime: (time: number) => void;
   setPlaybackState: (state: 'playing' | 'paused') => void;
   setSelectedClip: (clipId: string | null) => void;
@@ -167,6 +170,13 @@ export const useEditorStore = create<EditorState>()(
 
     addAsset: (asset) => set(state => {
       state.assets.push(asset);
+    }),
+
+    updateAsset: (assetId, updates) => set(state => {
+      const asset = state.assets.find(a => a.id === assetId);
+      if (asset) {
+        Object.assign(asset, updates);
+      }
     }),
 
     addTrack: (type) => set(state => {
@@ -382,7 +392,8 @@ export const useEditorStore = create<EditorState>()(
       }
     }),
 
-    extractAudioFromVideo: (trackId, clipId) => set(state => {
+    extractAudioFromVideo: async (trackId, clipId) => {
+      const state = get();
       const vTrack = state.project.tracks.find(t => t.id === trackId);
       if (!vTrack) return;
       const vClip = vTrack.clips.find(c => c.id === clipId);
@@ -391,38 +402,87 @@ export const useEditorStore = create<EditorState>()(
         return;
       }
 
-      vClip.volume = 0; // mute the original video
+      state.addSnackbar('info', 'Extracting audio (WASM FFmpeg)... This may take a moment.');
 
-      // Find first audio track or create one if none exist
-      let aTrack = state.project.tracks.find(t => t.type === 'audio');
-      if (!aTrack) {
-        const maxNum = state.project.tracks.reduce((m, t) => Math.max(m, t.trackNumber), -1);
-        aTrack = {
-          id: uuidv4(), type: 'audio', trackNumber: maxNum + 1,
-          name: `Audio ${state.project.tracks.filter(t => t.type === 'audio').length + 1}`,
-          muted: false, visible: true, clips: []
-        };
-        state.project.tracks.push(aTrack);
-        logger.action(`Create audio track for extraction`, 'SUCCESS', { trackName: aTrack.name });
+      // Obtain the file blob (prefer localFile, then localUrl, then server fallback)
+      let videoBlob: Blob | File | undefined = vClip.localFile;
+      if (!videoBlob && vClip.localUrl) {
+        try { videoBlob = await (await fetch(vClip.localUrl)).blob(); } catch (e) { /* ignore */ }
       }
-
-      const aClip: Clip = {
-        ...JSON.parse(JSON.stringify(vClip)),
-        id: uuidv4(),
-        trackId: aTrack.id,
-        trackNumber: aTrack.trackNumber,
-        type: 'audio',
-        volume: 1, // original volume
-      };
-      aTrack.clips.push(aClip);
+      if (!videoBlob) {
+        try { videoBlob = await (await fetch(`http://localhost:3001/api/upload/file/${vClip.filePath.split(/[\\/]/).pop()}`)).blob(); } catch(e) { /* ignore */ }
+      }
       
-      // Auto-update outPoint if not manually set
-      if (!get().outPointManuallySet) {
-        const allClips = state.project.tracks.flatMap(t => t.clips);
-        const lastClipEnd = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
-        state.project.outPoint = lastClipEnd;
+      if (!videoBlob) {
+        state.addSnackbar('error', 'Failed to retrieve video data for extraction.');
+        return;
       }
-    }),
+
+      try {
+        const audioFile = await extractAudioLocally(videoBlob, vClip.originalName);
+        
+        // Upload audio file
+        const formData = new FormData();
+        formData.append('file', audioFile);
+        
+        const res = await api.post('/api/upload', formData);
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+        
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        const newAsset: AssetMeta = {
+          ...data.asset,
+          localUrl: URL.createObjectURL(audioFile),
+          localFile: audioFile
+        };
+
+        // Mutate store to add asset, update clips, create tracks
+        set(draft => {
+          draft.assets.push(newAsset);
+          
+          const draftVTrack = draft.project.tracks.find(t => t.id === trackId);
+          const draftVClip = draftVTrack?.clips.find(c => c.id === clipId);
+          if (draftVClip) draftVClip.volume = 0; // mute the original video
+          
+          let aTrack = draft.project.tracks.find(t => t.type === 'audio');
+          if (!aTrack) {
+            const maxNum = draft.project.tracks.reduce((m, t) => Math.max(m, t.trackNumber), -1);
+            aTrack = {
+              id: uuidv4(), type: 'audio', trackNumber: maxNum + 1,
+              name: `Audio ${draft.project.tracks.filter(t => t.type === 'audio').length + 1}`,
+              muted: false, visible: true, clips: []
+            };
+            draft.project.tracks.push(aTrack);
+            logger.action(`Create audio track for extraction`, 'SUCCESS', { trackName: aTrack.name });
+          }
+
+          const aClip: Clip = {
+            ...JSON.parse(JSON.stringify(vClip)), // copy timeline position, src offsets, duration, transforms etc
+            id: uuidv4(),
+            trackId: aTrack.id,
+            trackNumber: aTrack.trackNumber,
+            type: 'audio',
+            volume: 1, // Reset volume to 1
+            filePath: newAsset.filePath,
+            localUrl: newAsset.localUrl,
+            localFile: newAsset.localFile,
+            originalName: newAsset.originalName,
+          };
+          aTrack.clips.push(aClip);
+
+          if (!draft.outPointManuallySet) {
+            const allClips = draft.project.tracks.flatMap(t => t.clips);
+            draft.project.outPoint = allClips.reduce((max, c) => Math.max(max, c.timelinePosition + c.timelineDuration), 0);
+          }
+        });
+        
+        get().addSnackbar('success', 'Audio extracted successfully.');
+      } catch (err: any) {
+        logger.error('Extraction failed', err);
+        state.addSnackbar('error', `Audio extraction failed: ${err.message}`);
+      }
+    },
 
     setCursorTime: (time) => set(state => { state.cursorTime = Math.max(0, time); }),
     setPlaybackState: (s) => set(state => { state.playbackState = s; }),

@@ -108,7 +108,7 @@ export default function PreviewPlayer() {
           const vid = videoRef.current;
           if (vid && vid.readyState >= 2) {
             // Check if this clip is the currently playing video in the hidden video element
-            const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+            const src = clip.localUrl || `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
             if (vid.src.includes(src.split('/').pop()!)) {
               ctx.save();
               ctx.globalAlpha = clip.opacity ?? 1;
@@ -142,7 +142,7 @@ export default function PreviewPlayer() {
                 const liveTime = useEditorStore.getState().cursorTime;
                 drawOverlays(liveTime, liveProj);
               };
-              img.src = `${API}/api/upload/file/${filename}`;
+              img.src = clip.localUrl || `${API}/api/upload/file/${filename}`;
               imageCache.current[filename] = img;
             }
             if (img.complete && img.naturalHeight !== 0) {
@@ -247,7 +247,7 @@ export default function PreviewPlayer() {
         const track = project.tracks.find(t => t.id === clip.trackId);
         vid.muted = track?.muted || false;
         vid.volume = clip.volume ?? 1;
-        const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+        const src = clip.localUrl || `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
         if (!vid.src.includes(src.split('/').pop()!)) { 
           vid.src = src; 
           vid.load();
@@ -270,8 +270,8 @@ export default function PreviewPlayer() {
       if (!aRef) continue;
       const aClip = track.clips.find(c => cursorTime >= c.timelinePosition && cursorTime < c.timelinePosition + c.timelineDuration);
       if (aClip && !track.muted && track.visible) {
-        const src = `${API}/api/upload/file/${aClip.filePath.split(/[\\/]/).pop()}`;
-        if (!aRef.src.includes(aClip.filePath.split(/[\\/]/).pop()!)) { aRef.src = src; aRef.load(); }
+        const src = aClip.localUrl || `${API}/api/upload/file/${aClip.filePath.split(/[\\/]/).pop()}`;
+        if (!aRef.src.includes(aClip.filePath.split(/[\\/]/).pop()!) && (!aClip.localUrl || aRef.src !== aClip.localUrl)) { aRef.src = src; aRef.load(); }
         aRef.volume = aClip.volume ?? 1;
         const clipOffset = cursorTime - aClip.timelinePosition + aClip.srcStart;
         if (Math.abs(aRef.currentTime - clipOffset) > 0.1) aRef.currentTime = clipOffset;
@@ -312,8 +312,8 @@ export default function PreviewPlayer() {
             const track = proj.tracks.find(t => t.id === clip.trackId);
             vid.muted = track?.muted || false;
             vid.volume = clip.volume ?? 1;
-            const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
-            if (!vid.src.includes(clip.filePath.split(/[\\/]/).pop()!)) {
+            const src = clip.localUrl || `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+            if (!vid.src.includes(clip.filePath.split(/[\\/]/).pop()!) && (!clip.localUrl || vid.src !== clip.localUrl)) {
               vid.src = src; vid.load();
             }
             if (vid.paused) vid.play().catch(() => {});
@@ -337,8 +337,8 @@ export default function PreviewPlayer() {
 
           const clip = track.clips.find(c => newTime >= c.timelinePosition && newTime < c.timelinePosition + c.timelineDuration);
           if (clip) {
-            const src = `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
-            if (!aRef.src.includes(clip.filePath.split(/[\\/]/).pop()!)) {
+            const src = clip.localUrl || `${API}/api/upload/file/${clip.filePath.split(/[\\/]/).pop()}`;
+            if (!aRef.src.includes(clip.filePath.split(/[\\/]/).pop()!) && (!clip.localUrl || aRef.src !== clip.localUrl)) {
               aRef.src = src; aRef.load();
             }
             aRef.volume = clip.volume ?? 1;
