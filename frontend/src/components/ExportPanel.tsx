@@ -35,7 +35,6 @@ export default function ExportPanel() {
           return {
             ...clip,
             filePath: asset.filePath,
-            localUrl: asset.localUrl,
             thumbnail: asset.thumbnail,
             width: asset.width,
             height: asset.height,

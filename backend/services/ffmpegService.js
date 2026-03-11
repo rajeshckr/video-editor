@@ -535,19 +535,52 @@ async function renderBaseVideo({ videoClips, imageClips, inPoint, duration, W, H
     // 1. Trim to clip's source range and duration within render window
     // 2. Reset PTS (presentation timestamp) to start at 0
     // 3. Scale and pad to fit canvas (maintains aspect ratio, centers content)
+    // 4. Apply transform (scale, rotation) and opacity
 
-    const scalePad = buildScalePadFilter(W, H, false);
+    const tr = clip.transform || { x: 0, y: 0, scale: 1, rotation: 0 };
+    const opacity = clip.opacity !== undefined ? clip.opacity : 1;
+    const clipScale = Math.max(0.1, Number(tr.scale || 1));
+    const rotationRad = (Number(tr.rotation || 0)) * Math.PI / 180;
+    const posX = (W / 2) + (tr.x || 0);
+    const posY = (H / 2) + (tr.y || 0);
 
-    filterParts.push(
-      `[${idx}:v]trim=start=${clip.srcStart}:duration=${timing.clipDuration},setpts=PTS-STARTPTS,${scalePad}[${label}]`
-    );
+    const needsTransform = clipScale !== 1 || rotationRad !== 0 || opacity !== 1;
+
+    const scalePad = buildScalePadFilter(W, H, needsTransform);
+
+    let filterChain = `[${idx}:v]trim=start=${clip.srcStart}:duration=${timing.clipDuration},setpts=PTS-STARTPTS,${scalePad}`;
+
+    if (needsTransform) {
+      // Apply scale
+      if (clipScale !== 1) {
+        filterChain += `,scale=iw*${clipScale}:ih*${clipScale}`;
+      }
+      // Apply rotation (FFmpeg rotate filter uses radians, fills transparent)
+      if (rotationRad !== 0) {
+        filterChain += `,rotate=${rotationRad.toFixed(6)}:fillcolor=none:ow=rotw(${rotationRad.toFixed(6)}):oh=roth(${rotationRad.toFixed(6)})`;
+      }
+      // Apply opacity
+      if (opacity !== 1) {
+        filterChain += `,colorchannelmixer=aa=${opacity}`;
+      }
+    }
+
+    filterChain += `[${label}]`;
+    filterParts.push(filterChain);
 
     const comma = "\\,";
 
-    // Overlay this clip on current base at its timeline position
-    filterParts.push(
-      `[${currentVideo}][${label}]overlay=enable=between(t${comma}${timing.relStart}${comma}${timing.relEnd}):x=0:y=0[${overlayLabel}]`
-    );
+    if (needsTransform) {
+      // Overlay with position (center-anchored)
+      filterParts.push(
+        `[${currentVideo}][${label}]overlay=enable=between(t${comma}${timing.relStart}${comma}${timing.relEnd}):x=(${posX.toFixed(3)})-(overlay_w/2):y=(${posY.toFixed(3)})-(overlay_h/2)[${overlayLabel}]`
+      );
+    } else {
+      // Default: overlay at 0,0 (full canvas, no transform)
+      filterParts.push(
+        `[${currentVideo}][${label}]overlay=enable=between(t${comma}${timing.relStart}${comma}${timing.relEnd}):x=0:y=0[${overlayLabel}]`
+      );
+    }
     
     // Update current video stream to the overlay result
     currentVideo = overlayLabel;
@@ -579,10 +612,17 @@ async function renderBaseVideo({ videoClips, imageClips, inPoint, duration, W, H
     const posY = clip.y !== undefined ? (clip.y + (tr.y || 0)) : ((H / 2) + (tr.y || 0));
     const scale = Math.max(0.1, Number(tr.scale || 1));
 
-    // Build filter for image: fit to canvas, apply clip zoom, then opacity.
-    filterParts.push(
-      `[${idx}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,format=rgba,scale=iw*${scale}:ih*${scale},colorchannelmixer=aa=${opacity}[${label}]`
-    );
+    // Build filter for image: fit to canvas, apply clip zoom, rotation, then opacity.
+    const rotationRad = (Number(tr.rotation || 0)) * Math.PI / 180;
+    let imgFilterChain = `[${idx}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,format=rgba,scale=iw*${scale}:ih*${scale}`;
+
+    // Apply rotation if non-zero
+    if (rotationRad !== 0) {
+      imgFilterChain += `,rotate=${rotationRad.toFixed(6)}:fillcolor=none:ow=rotw(${rotationRad.toFixed(6)}):oh=roth(${rotationRad.toFixed(6)})`;
+    }
+
+    imgFilterChain += `,colorchannelmixer=aa=${opacity}[${label}]`;
+    filterParts.push(imgFilterChain);
 
     const comma = "\\\,";
     

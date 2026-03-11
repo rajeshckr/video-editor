@@ -315,6 +315,8 @@ export default function PropertiesPanel() {
                 }}
               />
             </div>
+            {/* Rotation: hidden for text clips (not supported in backend render) */}
+            {!isText && (
             <div>
               <label className="text-xs text-editor-muted mb-1 block">Rotation: {tr.rotation}°</label>
               <input
@@ -327,6 +329,7 @@ export default function PropertiesPanel() {
                 onChange={e => update('transform', { ...tr, rotation: Number(e.target.value) })}
               />
             </div>
+            )}
             </>}
           </div>
         )}
