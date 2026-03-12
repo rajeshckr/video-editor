@@ -14,6 +14,29 @@ export default function ExportPanel() {
   const inPoint = project.inPoint;
   const outPoint = project.outPoint;
 
+  const getRenderedFileName = () => {
+    const safeTitle = (project.projectName || 'studio_video').trim().replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
+    const baseName = safeTitle.length > 0 ? safeTitle : 'studio_video';
+    return `${baseName}.${format}`;
+  };
+
+  const previewAndUpload = () => {
+    if (!downloadUrl) {
+      return;
+    }
+
+    const absoluteUrl = new URL(downloadUrl, window.location.origin).toString();
+    const payload = {
+      url: absoluteUrl,
+      fileName: getRenderedFileName(),
+      mimeType: format === 'webm' ? 'video/webm' : 'video/mp4',
+    };
+
+    window.parent.postMessage({ type: 'EDITOR_EXPORT_URL', payload }, '*');
+    setExportPanelOpen(false);
+    addSnackbar('success', 'Sent render to upload screen');
+  };
+
   const handleExport = async () => {
     setStatus('rendering');
     setProgress(0);
@@ -82,10 +105,11 @@ export default function ExportPanel() {
         setError('Connection lost'); 
         addSnackbar('error', 'Render connection lost');
       };
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       setStatus('error');
-      setError(e.message || 'Network error');
-      addSnackbar('error', `Render error: ${e.message || e}`);
+      setError(message || 'Network error');
+      addSnackbar('error', `Render error: ${message}`);
     }
   };
 
@@ -159,16 +183,35 @@ export default function ExportPanel() {
         )}
 
         {status === 'done' && (
-          <a href={downloadUrl} download className="btn btn-primary w-full justify-center text-xs">
-            ⬇ Download {format.toUpperCase()}
-          </a>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button className="btn btn-primary w-full justify-center text-xs gap-2" onClick={previewAndUpload}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M14 3h7v7" />
+                <path d="M10 14L21 3" />
+                <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+              </svg>
+              <span>Preview and Upload</span>
+            </button>
+            <a
+              href={downloadUrl}
+              download={getRenderedFileName()}
+              className="btn btn-ghost w-full justify-center text-xs gap-2 border border-editor-border"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M12 3v12" />
+                <path d="M7 10l5 5 5-5" />
+                <path d="M5 21h14" />
+              </svg>
+              <span>Download {format.toUpperCase()}</span>
+            </a>
+          </div>
         )}
 
         <div className="flex gap-2 justify-end">
           <button className="btn btn-ghost text-xs" onClick={() => setExportPanelOpen(false)}>Cancel</button>
           {status !== 'done' && (
             <button className="btn btn-primary text-xs" onClick={handleExport} disabled={status === 'rendering'}>
-              {status === 'rendering' ? '⏳ Rendering…' : '🎬 Export'}
+              {status === 'rendering' ? 'Rendering...' : 'Export'}
             </button>
           )}
         </div>
