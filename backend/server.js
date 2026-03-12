@@ -18,6 +18,27 @@ const setupWhisper = require('./setupWhisper');
 
 const app = express();
 
+function toOrigin(value) {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function parseCsvOrigins(value) {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((x) => toOrigin(x.trim()))
+    .filter(Boolean);
+}
+
+const allowOriginSet = new Set([
+  ...parseCsvOrigins(process.env.FRONTEND_URL),
+].filter(Boolean));
+
 // ─── Security: Block access to TMP and Tools ───────────────────────────────────
 app.use((req, res, next) => {
   const blocked = ['/tmp', '/tools'];
@@ -31,8 +52,7 @@ app.use((req, res, next) => {
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, Postman) or any localhost
-    if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) {
+    if (!origin || allowOriginSet.has(origin)) {
       callback(null, true);
     } else {
       callback(new Error('CORS: origin not allowed'));

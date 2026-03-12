@@ -8,6 +8,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    allowedHosts: ['www.example.com', 'example.com', 'localhost'],
     cors: true,
     headers: {
       'Access-Control-Allow-Origin': '*',
